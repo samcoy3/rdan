@@ -1,0 +1,42 @@
+name:                rdan
+version:             0.1.0.0
+github:              "samcoy3/rdan"
+license:             BSD3
+author:              "Sam Coy"
+maintainer:          "samjtcoy@gmail.com"
+copyright:           "2020 Sam Coy"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         A small bot to assist with games of Nomic.
+
+dependencies:
+- base >= 4.7 && < 5
+- containers
+- text >= 1.2
+- discord-haskell >= 1.5
+- stm >= 2.5
+
+library:
+  source-dirs: src
+
+executables:
+  rdan-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - rdan
+

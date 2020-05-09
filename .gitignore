@@ -1,0 +1,5 @@
+dist-newstyle/
+stack.yaml.lock
+src/Config-blank.hs
+.stack-work/
+*~
