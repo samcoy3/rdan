@@ -26,3 +26,7 @@ players = undefined
 -- The names of the players to be displayed in vote results and scores
 playerNames :: M.Map UserId String
 playerNames = undefined
+
+-- The scores of the players on bot startup
+scores :: M.Map UserId Int
+scores = undefined

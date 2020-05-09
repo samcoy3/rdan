@@ -20,9 +20,6 @@ import qualified Discord.Requests as R
 
 type ScoreMap = M.Map UserId Int
 
-startingScores :: ScoreMap
-startingScores = M.fromList $ [(p, 0) | p <- Config.players]
-
 sendMessage :: DiscordHandle -> ChannelId -> Text -> IO ()
 sendMessage disc channel m = do
   _ <- restCall disc $ R.CreateMessage channel m
@@ -31,7 +28,7 @@ sendMessage disc channel m = do
 main :: IO ()
 main = do
   currentVote <- newTVarIO NoVote
-  currentScores <- newTVarIO startingScores
+  currentScores <- newTVarIO Config.scores
   userError <- runDiscord $ def
                { discordToken = Config.botToken
                , discordOnEvent = handleEvent currentVote currentScores }

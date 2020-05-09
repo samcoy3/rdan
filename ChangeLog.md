@@ -1,6 +1,8 @@
 # Changelog for rdan
 
 ## Unreleased changes
+### Changed
+- Moved starting scores into Config.hs
 
 ## [0.1] - 2020-05-09
 ### Added
