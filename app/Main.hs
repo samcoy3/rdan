@@ -100,6 +100,18 @@ handleServerMessage vote scores disc (MessageCreate m)
       motion <- getMotion disc (read . T.unpack . last . T.words . messageText $ m)
       sendMessage disc (messageChannel m) motion
 
+  | "!help" `isPrefixOf` messageText m =
+      sendMessage disc (messageChannel m) $
+      T.unlines [ "Welcome to rdan, your robot delightfully assisting Nomic."
+                , "You can use the following commands to interact with the bot:"
+                , "`!rule <rule_number>`: Prints out the text of the relevant rule."
+                , "`!motion <motion_number>`: Prints out the text of the relevant motion."
+                , "`!scores`: Prints out the current scores for all players."
+                , "`!addscore <tag_player> <score_change>`: Changes the score of the player you tag by the number of points you specify."
+                , "`!newvote <topic>`: Starts a new vote on the topic you specify, and sends a DM to all players. You vote by replying to the DM."
+                , "`!votestatus`: Reminds you of the topic of the current vote, and reveals how many people have voted so far."
+                , "`!endvote`: Prematurely ends the vote, revealing all results. Once everyone has voted, this will happen anyway."]
+
   | otherwise = return ()
 
 handleServerMessage _ _ _ _ = return ()
