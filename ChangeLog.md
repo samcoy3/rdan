@@ -3,6 +3,8 @@
 ## Unreleased changes
 ### Changed
 - Moved starting scores into Config.hs.
+- Moved all the commands to Commands.hs. Now searches a map of commands rather than using isPrefixOf.
+- Improved documentation.
 
 ### Fixed
 - Fixed bug where !endvote would not end the vote.
