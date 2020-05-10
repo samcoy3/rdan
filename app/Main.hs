@@ -152,6 +152,7 @@ newVote vote channel purpose' = atomically $
 endVote :: TVar Vote -> DiscordHandle -> IO ()
 endVote vote disc = do
   stateOfVote <- readTVarIO vote
+  atomically $ writeTVar vote NoVote
   sendMessage disc (announceChannel stateOfVote) $
     "The vote on **" `T.append`
     purpose stateOfVote `T.append`

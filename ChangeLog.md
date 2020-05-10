@@ -2,7 +2,10 @@
 
 ## Unreleased changes
 ### Changed
-- Moved starting scores into Config.hs
+- Moved starting scores into Config.hs.
+
+### Fixed
+- Fixed bug where !endvote would not end the vote.
 
 ## [0.1] - 2020-05-09
 ### Added
