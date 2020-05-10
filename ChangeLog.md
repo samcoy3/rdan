@@ -8,6 +8,8 @@
 
 ### Fixed
 - Fixed bug where !endvote would not end the vote.
+- Fixed !rule and !motion breaking with bad input.
+- Fixed !endvote breaking when there's no current vote.
 
 ## [0.1] - 2020-05-09
 ### Added

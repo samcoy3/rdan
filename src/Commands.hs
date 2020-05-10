@@ -3,11 +3,13 @@
 module Commands where
 
 import Data.Either
+import Data.Maybe
 import qualified Data.Text as T
 import Data.Text (Text)
 import qualified Data.Map as M
 import Control.Monad.STM
 import Control.Concurrent.STM.TVar
+import Text.Read
 
 import Vote
 import Config
@@ -104,25 +106,29 @@ voteStatus disc (v, _) message = do
 
 -- Ends the current vote. If called as a command, this will be premature.
 endVote :: Command
-endVote disc (v, _) _ = do
+endVote disc (v, _) m = do
   stateOfVote <- readTVarIO v
-  atomically $ writeTVar v NoVote
-  sendMessage disc (announceChannel stateOfVote) $
-    "The vote on **" `T.append`
-    purpose stateOfVote `T.append`
-    "** has been concluded. The results are:\n" `T.append`
-    T.unlines ["**" `T.append` T.pack (Config.playerNames M.! p) `T.append` "**: " `T.append` e | (p,e) <- M.toList (responses stateOfVote)]
+  case stateOfVote of
+    NoVote -> sendMessage disc (messageChannel m)
+              "There is currently no vote to end."
+    VoteInProgress{} -> do
+      atomically $ writeTVar v NoVote
+      sendMessage disc (announceChannel stateOfVote) $
+        "The vote on **" `T.append`
+        purpose stateOfVote `T.append`
+        "** has been concluded. The results are:\n" `T.append`
+        T.unlines ["**" `T.append` T.pack (Config.playerNames M.! p) `T.append` "**: " `T.append` e | (p,e) <- M.toList (responses stateOfVote)]
 
 --- MISC ---
 
 findRuleOrMotion :: String -> ChannelId -> Command
 findRuleOrMotion search channel disc _ message =
-  let number = (read . T.unpack . last . T.words . messageText $ message) :: Int in
+  let number = (readMaybe . T.unpack . head . tail . T.words . messageText $ message) :: Maybe Int in
   do
     messages <- restCall disc $
                 R.GetChannelMessages channel (100, R.LatestMessages)
     let validRules = filter
-                     (\t -> T.pack ("**" ++ search ++ " " ++ show number ++ "**") `T.isPrefixOf` t)
+                     (\t -> T.pack ("**" ++ search ++ " " ++ show (fromMaybe 0 number) ++ "**") `T.isPrefixOf` t)
                      (map messageText $ fromRight [] messages)
     sendMessage disc (messageChannel message) $
       if null validRules
