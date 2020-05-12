@@ -20,7 +20,22 @@ import qualified Discord.Requests as R
 
 type ScoreMap = M.Map UserId Int
 type GameState = (TVar Vote, TVar ScoreMap)
-type Command = DiscordHandle -> GameState -> Message -> IO ()
+
+--- Command type ---
+
+data Retrievable = Rule Int | Motion Int deriving (Show, Eq)
+data Command =
+  Help (Maybe Text)
+  | PrintScores
+  | AddToScore UserId Int
+  | Find Retrievable
+  | FindInline [Retrievable]
+  | NewVote Text
+  | VoteStatus
+  | EndVote
+  deriving (Show, Eq)
+
+type Command' = DiscordHandle -> GameState -> Message -> IO ()
 
 -- A utility for sending messages. Currently we ignore whether it was successful.
 sendMessage :: DiscordHandle -> ChannelId -> Text -> IO ()
@@ -28,7 +43,7 @@ sendMessage disc channel m = do
   _ <- restCall disc $ R.CreateMessage channel m
   return ()
 
-commandMap :: M.Map Text Command
+commandMap :: M.Map Text Command'
 commandMap = M.fromList
   [ ("!help", printHelp)
   , ("!scores", printScores)
@@ -36,17 +51,17 @@ commandMap = M.fromList
   , ("!rule", findRule)
   , ("!motion", findMotion)
   , ("!newvote", startVote)
-  , ("!voteStatus", voteStatus)
+  , ("!votestatus", voteStatus)
   , ("!endvote", endVote)]
 
 --- COMMANDS ---
 
 -- Prints the help text.
-printHelp :: Command
+printHelp :: Command'
 printHelp disc _ message = sendMessage disc (messageChannel message) helpText
 
 -- Prints the current scores.
-printScores :: Command
+printScores :: Command'
 printScores disc (_, s) message = do
   currentScores <- readTVarIO s
   let scoreText = "The current scores are:\n"
@@ -54,7 +69,7 @@ printScores disc (_, s) message = do
   sendMessage disc (messageChannel message) scoreText
 
 -- Updates a user's score.
-updateScore :: Command
+updateScore :: Command'
 updateScore disc (_, s) message = do
   atomically $ modifyTVar s (M.update (pure . (+amount)) uid)
   sendMessage disc (messageChannel message) "Scores updated."
@@ -63,15 +78,15 @@ updateScore disc (_, s) message = do
       uid = userId . head . messageMentions $ message
 
 -- Finds a specified rule.
-findRule :: Command
+findRule :: Command'
 findRule = findRuleOrMotion "Rule" Config.rulesChannel
 
 -- Finds a specified motion.
-findMotion :: Command
+findMotion :: Command'
 findMotion = findRuleOrMotion "Motion" Config.motionsChannel
 
 -- Starts a new vote, or tells the user asking that it is not possible.
-startVote :: Command
+startVote :: Command'
 startVote disc (v, _) message = do
   currentVote <- readTVarIO v
   case currentVote of
@@ -89,7 +104,7 @@ startVote disc (v, _) message = do
       mapM_ ((\c -> sendMessage disc c $ "A new vote has begun! Please write a response to this message to vote on the matter of **" `T.append` purpose' `T.append` "**:") . channelId) userHandles
 
 -- Prints the status of the current vote.
-voteStatus :: Command
+voteStatus :: Command'
 voteStatus disc (v, _) message = do
   currentVote <- readTVarIO v
   sendMessage disc (messageChannel message) $
@@ -105,7 +120,7 @@ voteStatus disc (v, _) message = do
         " have voted."
 
 -- Ends the current vote. If called as a command, this will be premature.
-endVote :: Command
+endVote :: Command'
 endVote disc (v, _) m = do
   stateOfVote <- readTVarIO v
   case stateOfVote of
@@ -121,7 +136,7 @@ endVote disc (v, _) m = do
 
 --- MISC ---
 
-findRuleOrMotion :: String -> ChannelId -> Command
+findRuleOrMotion :: String -> ChannelId -> Command'
 findRuleOrMotion search channel disc _ message =
   let number = (readMaybe . T.unpack . head . tail . T.words . messageText $ message) :: Maybe Int in
   do

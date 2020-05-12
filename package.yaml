@@ -25,6 +25,7 @@ dependencies:
 - text >= 1.2
 - discord-haskell >= 1.5
 - stm >= 2.5
+- attoparsec >= 0.13.2
 
 library:
   source-dirs: src
