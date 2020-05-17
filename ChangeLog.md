@@ -1,6 +1,8 @@
 # Changelog for rdan
 
 ## Unreleased changes
+
+## [0.2] - 2020-05-17
 ### Added
 - Added !roll command
 
