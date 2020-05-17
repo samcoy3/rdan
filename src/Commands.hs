@@ -35,79 +35,90 @@ data Command =
   | EndVote
   deriving (Show, Eq)
 
-type Command' = DiscordHandle -> GameState -> Message -> IO ()
-
 -- A utility for sending messages. Currently we ignore whether it was successful.
 sendMessage :: DiscordHandle -> ChannelId -> Text -> IO ()
 sendMessage disc channel m = do
   _ <- restCall disc $ R.CreateMessage channel m
   return ()
 
-commandMap :: M.Map Text Command'
-commandMap = M.fromList
-  [ ("!help", printHelp)
-  , ("!scores", printScores)
-  , ("!addscore", updateScore)
-  , ("!rule", findRule)
-  , ("!motion", findMotion)
-  , ("!newvote", startVote)
-  , ("!votestatus", voteStatus)
-  , ("!endvote", endVote)]
+--- COMMAND ACTION ---
 
---- COMMANDS ---
+enactCommand :: DiscordHandle -> GameState -> Message -> Command -> IO ()
 
--- Prints the help text.
-printHelp :: Command'
-printHelp disc _ message = sendMessage disc (messageChannel message) helpText
+enactCommand disc _ m (Help s) = sendMessage disc (messageChannel m)
+  (case s of
+    Nothing -> "I'm rdan, the robot delightfully aiding Nomic.\n"
+               <> "To view help on a specific command, type `!help` followed by the command you want to learn about. For example: `!help scores` to learn more about the `!scores` command.\n"
+               <> "The list of commands available are as follows: `help`, `scores`, `addscore`, `rule`, `motion`, `newote`, `votestatus` `endvote`."
+    Just "help" -> "To view help on a specific command, type `!help` followed by the command you want to learn about. For example: `!help scores` to learn more about the `!scores` command.\n"
+               <> "The list of commands available are as follows: `help`, `scores`, `addscore`, `rule`, `motion`, `newote`, `votestatus` `endvote`."
+    Just "scores" -> "Usage: `!scores`\n"
+                     <> "Displays the current scores of all the players."
+    Just "addscore" -> "Usage: `!addscore <player> <delta>`\n"
+                       <> "Changes `<player>`'s score by `<delta>`. You must tag `<player` to use this command."
+    Just "rule" -> "Usage: `!rule <rule_number>`\n"
+                   <> "Retrieves the rule numbered `<rule_number>`. You can also call this inline with `!r<rule_number>`."
+    Just "motion" -> "Usage: `!motion <motion_number>`\n"
+                     <> "Retrieves the motion numbered `<motion_number>`. You can also call this inline with `!m<motion_number>`."
+    Just "newvote" -> "Usage: `!newvote <purpose>`\n"
+                      <> "Starts a new vote on the subject of `<purpose>`."
+    Just "votestatus" -> "Usage: `!votestatus`\n"
+                         <> "Queries the status of the ongoing vote. Will show how many people have voted, and display the subject of the vote."
+    Just "endvote" -> "Usage: `!endvote`\n"
+                      <> "Prematurely ends the current vote. Note that a vote will end automatically once every player has voted anyway; you should use this command only if you want to end the vote prior to everyone having voted."
+    )
 
--- Prints the current scores.
-printScores :: Command'
-printScores disc (_, s) message = do
+enactCommand disc (_, s) m PrintScores = do
   currentScores <- readTVarIO s
   let scoreText = "The current scores are:\n"
         `T.append` T.unlines [T.pack $ (Config.playerNames M.! p) ++ ": " ++ show score | (p,score) <- M.toList currentScores]
-  sendMessage disc (messageChannel message) scoreText
+  sendMessage disc (messageChannel m) scoreText
 
--- Updates a user's score.
-updateScore :: Command'
-updateScore disc (_, s) message = do
-  atomically $ modifyTVar s (M.update (pure . (+amount)) uid)
-  sendMessage disc (messageChannel message) "Scores updated."
+enactCommand disc (_, s) m (AddToScore user delta) = do
+  atomically $ modifyTVar s (M.update (pure . (+delta)) user)
+  sendMessage disc (messageChannel m) "Scores updated."
+
+enactCommand disc _ m (Find x) = do
+  result <- getRetrieveable disc x
+  sendMessage disc (messageChannel m) $
+    (case result of
+       Left retr -> (T.pack . show $ retr) <> " not found, sorry!"
+       Right ruleText -> T.unlines . tail . T.lines $ ruleText
+    )
+
+enactCommand disc _ m (FindInline xs) = do
+  results <- getRetrieveables disc xs
+  sendMessage disc (messageChannel m ) $
+    T.unlines $
+    map (\r -> case r of
+            Left retr -> "Could not find " <> (T.pack . show $ retr) <> "."
+            Right ruleText -> ruleText
+        ) results
     where
-      amount = read . T.unpack . last . T.words . messageText $ message
-      uid = userId . head . messageMentions $ message
+      getRetrieveables _ [] = return []
+      getRetrieveables disc' (x:xs') = do
+        current <- getRetrieveable disc' x
+        futures <- getRetrieveables disc' xs'
+        return $ current : futures
 
--- Finds a specified rule.
-findRule :: Command'
-findRule = findRuleOrMotion "Rule" Config.rulesChannel
-
--- Finds a specified motion.
-findMotion :: Command'
-findMotion = findRuleOrMotion "Motion" Config.motionsChannel
-
--- Starts a new vote, or tells the user asking that it is not possible.
-startVote :: Command'
-startVote disc (v, _) message = do
+enactCommand disc (v, _) m (NewVote purpose') = do
   currentVote <- readTVarIO v
   case currentVote of
     VoteInProgress {} -> sendMessage
                          disc
-                         (messageChannel message)
+                         (messageChannel m)
                          "There is currently a vote in progress; you cannot start a new vote at this time."
     NoVote -> do
-      let purpose' = T.unwords . tail . T.words $ messageText message
       atomically $ writeTVar v VoteInProgress
         { responses = M.empty
         , purpose = purpose'
-        , announceChannel = messageChannel message}
+        , announceChannel = messageChannel m}
       userHandles <- getDMs disc Config.players
       mapM_ ((\c -> sendMessage disc c $ "A new vote has begun! Please write a response to this message to vote on the matter of **" `T.append` purpose' `T.append` "**:") . channelId) userHandles
 
--- Prints the status of the current vote.
-voteStatus :: Command'
-voteStatus disc (v, _) message = do
+enactCommand disc (v, _) m (VoteStatus) = do
   currentVote <- readTVarIO v
-  sendMessage disc (messageChannel message) $
+  sendMessage disc (messageChannel m) $
     case currentVote of
       NoVote -> "There is not currently a vote in progress."
       VoteInProgress r p _ ->
@@ -119,9 +130,7 @@ voteStatus disc (v, _) message = do
         (T.pack . show . length . M.keys $ r) `T.append`
         " have voted."
 
--- Ends the current vote. If called as a command, this will be premature.
-endVote :: Command'
-endVote disc (v, _) m = do
+enactCommand disc (v, _) m (EndVote) = do
   stateOfVote <- readTVarIO v
   case stateOfVote of
     NoVote -> sendMessage disc (messageChannel m)
@@ -136,19 +145,22 @@ endVote disc (v, _) m = do
 
 --- MISC ---
 
-findRuleOrMotion :: String -> ChannelId -> Command'
-findRuleOrMotion search channel disc _ message =
-  let number = (readMaybe . T.unpack . head . tail . T.words . messageText $ message) :: Maybe Int in
+getRetrieveable :: DiscordHandle -> Retrievable -> IO (Either Retrievable Text)
+getRetrieveable disc retr =
   do
     messages <- restCall disc $
                 R.GetChannelMessages channel (100, R.LatestMessages)
     let validRules = filter
-                     (\t -> T.pack ("**" ++ search ++ " " ++ show (fromMaybe 0 number) ++ "**") `T.isPrefixOf` t)
+                     (\t -> T.pack ("**" ++ show retr ++ "**") `T.isPrefixOf` t)
                      (map messageText $ fromRight [] messages)
-    sendMessage disc (messageChannel message) $
+    return $
       if null validRules
-      then T.pack "Nothing found, sorry!"
-      else T.unlines . tail . T.lines . head $ validRules
+      then Left retr
+      else Right (head validRules)
+      where
+        channel = case retr of
+          Rule _ -> Config.rulesChannel
+          Motion _ -> Config.motionsChannel
 
 getDMs :: DiscordHandle -> [UserId] -> IO [Channel]
 getDMs _ [] = return []
@@ -158,15 +170,3 @@ getDMs disc (u:us) = do
   case channel of
     Left _ -> return restChannels
     Right c -> return $ c : restChannels
-
-helpText :: Text
-helpText = T.unlines
-  [ "Welcome to rdan, your robot delightfully assisting Nomic."
-  , "You can use the following commands to interact with the bot:"
-  , "`!rule <rule_number>`: Prints out the text of the relevant rule."
-  , "`!motion <motion_number>`: Prints out the text of the relevant motion."
-  , "`!scores`: Prints out the current scores for all players."
-  , "`!addscore <tag_player> <score_change>`: Changes the score of the player you tag by the number of points you specify."
-  , "`!newvote <topic>`: Starts a new vote on the topic you specify, and sends a DM to all players. You vote by replying to the DM."
-  , "`!votestatus`: Reminds you of the topic of the current vote, and reveals how many people have voted so far."
-  , "`!endvote`: Prematurely ends the vote, revealing all results. Once everyone has voted, this will happen anyway."]
