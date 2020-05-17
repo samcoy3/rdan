@@ -1,6 +1,8 @@
 # Changelog for rdan
 
 ## Unreleased changes
+
+## [0.1.1] - 2020-05-11
 ### Changed
 - Moved starting scores into Config.hs.
 - Moved all the commands to Commands.hs. Now searches a map of commands rather than using isPrefixOf.
