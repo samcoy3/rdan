@@ -5,6 +5,7 @@ module Main where
 import Config
 import Vote
 import Commands
+import CommandParser
 
 import qualified Data.Text as T
 import qualified Data.Map as M
@@ -16,6 +17,7 @@ import Control.Concurrent.STM.TVar
 import Discord
 import Discord.Types
 import qualified Discord.Requests as R
+import Data.Attoparsec.Text as A
 
 main :: IO ()
 main = do
@@ -41,11 +43,10 @@ handleEvent g disc event = case event of
   _ -> return ()
 
 handleServerMessage :: GameState -> DiscordHandle -> Event -> IO ()
-handleServerMessage g disc (MessageCreate m)
-  -- Checks if command is in the command map.
-  | (head . T.words . messageText $ m) `elem` M.keys Commands.commandMap =
-      (Commands.commandMap M.! (head . T.words . messageText $ m)) disc g m
-  | otherwise = return ()
+handleServerMessage g disc (MessageCreate m) =
+  case (A.parseOnly commandParser $ messageText m) of
+    Left _ -> return ()
+    Right cmd -> enactCommand disc g m cmd
 
 handleServerMessage _ _ _ = return ()
 
@@ -68,7 +69,7 @@ handleDM g@(vote, _) disc event = case event of
          atomically $ modifyTVar vote (\v -> v {responses = M.insert user (messageText m) (responses currentVote)})
          newStateOfVote <- readTVarIO vote
          if (length . M.keys . responses $ newStateOfVote) == length Config.players
-           then Commands.endVote disc g m
+           then enactCommand disc g m EndVote
            else return ()
            where user = userId . messageAuthor $ m
   _ -> return ()

@@ -1,6 +1,12 @@
 # Changelog for rdan
 
 ## Unreleased changes
+### Changed
+- Added Attoparsec parser for commands.
+- Reworked !help so that it processes all commands as an argument, e.g. !help scores.
+
+### Fixed
+- !rule not taking an argument no longer crashes the bot.
 
 ## [0.1.1] - 2020-05-11
 ### Changed
