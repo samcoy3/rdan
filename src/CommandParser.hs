@@ -17,6 +17,7 @@ commandParser = helpParser
                 <|> printScoresParser
                 <|> addToScoreParser
                 <|> findParser
+                <|> rollParser
                 <|> newVoteParser
                 <|> voteStatusParser
                 <|> endVoteParser
@@ -32,6 +33,7 @@ helpParser = do
                                  , "addscore"
                                  , "rule"
                                  , "motion"
+                                 , "roll"
                                  , "newvote"
                                  , "votestatus"
                                  , "endvote"])
@@ -60,6 +62,15 @@ findInlineParser :: Parser Command
 findInlineParser = do
   retrievables <- many1 findOneInlineParser
   return $ FindInline retrievables
+
+rollParser :: Parser Command
+rollParser = do
+  asciiCI "!roll"
+  skipSpace
+  quantity <- decimal
+  char 'd'
+  sidedness <- decimal
+  return $ Roll quantity sidedness
 
 newVoteParser :: Parser Command
 newVoteParser = do

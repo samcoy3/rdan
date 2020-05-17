@@ -1,6 +1,9 @@
 # Changelog for rdan
 
 ## Unreleased changes
+### Added
+- Added !roll command
+
 ### Changed
 - Added Attoparsec parser for commands.
 - Reworked !help so that it processes all commands as an argument, e.g. !help scores.

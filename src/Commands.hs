@@ -9,6 +9,7 @@ import Data.Text (Text)
 import qualified Data.Map as M
 import Control.Monad.STM
 import Control.Concurrent.STM.TVar
+import System.Random
 import Text.Read
 
 import Vote
@@ -30,6 +31,7 @@ data Command =
   | AddToScore UserId Int
   | Find Retrievable
   | FindInline [Retrievable]
+  | Roll Int Int
   | NewVote Text
   | VoteStatus
   | EndVote
@@ -49,9 +51,9 @@ enactCommand disc _ m (Help s) = sendMessage disc (messageChannel m)
   (case s of
     Nothing -> "I'm rdan, the robot delightfully aiding Nomic.\n"
                <> "To view help on a specific command, type `!help` followed by the command you want to learn about. For example: `!help scores` to learn more about the `!scores` command.\n"
-               <> "The list of commands available are as follows: `help`, `scores`, `addscore`, `rule`, `motion`, `newote`, `votestatus` `endvote`."
+               <> "The list of commands available are as follows: `help`, `scores`, `addscore`, `rule`, `motion`, `newote`, `roll`, `votestatus`, `endvote`."
     Just "help" -> "To view help on a specific command, type `!help` followed by the command you want to learn about. For example: `!help scores` to learn more about the `!scores` command.\n"
-               <> "The list of commands available are as follows: `help`, `scores`, `addscore`, `rule`, `motion`, `newote`, `votestatus` `endvote`."
+               <> "The list of commands available are as follows: `help`, `scores`, `addscore`, `rule`, `motion`, `newote`, `roll`, `votestatus`, `endvote`."
     Just "scores" -> "Usage: `!scores`\n"
                      <> "Displays the current scores of all the players."
     Just "addscore" -> "Usage: `!addscore <player> <delta>`\n"
@@ -60,6 +62,8 @@ enactCommand disc _ m (Help s) = sendMessage disc (messageChannel m)
                    <> "Retrieves the rule numbered `<rule_number>`. You can also call this inline with `!r<rule_number>`."
     Just "motion" -> "Usage: `!motion <motion_number>`\n"
                      <> "Retrieves the motion numbered `<motion_number>`. You can also call this inline with `!m<motion_number>`."
+    Just "roll" -> "Usage: `!roll <x>d<y>`\n"
+                   <> "Rolls a d`<y>`dice `<x>` times and displays the results."
     Just "newvote" -> "Usage: `!newvote <purpose>`\n"
                       <> "Starts a new vote on the subject of `<purpose>`."
     Just "votestatus" -> "Usage: `!votestatus`\n"
@@ -100,6 +104,14 @@ enactCommand disc _ m (FindInline xs) = do
         current <- getRetrieveable disc' x
         futures <- getRetrieveables disc' xs'
         return $ current : futures
+
+enactCommand disc _ m (Roll quant sides) = do
+  let bounds = replicate quant (1, sides) :: [(Int, Int)]
+  rolls <- mapM randomRIO bounds
+  sendMessage disc (messageChannel m) $
+    (T.pack . show . sum $ rolls) <>
+    " ⟵ " <>
+    (T.pack . show $ rolls)
 
 enactCommand disc (v, _) m (NewVote purpose') = do
   currentVote <- readTVarIO v

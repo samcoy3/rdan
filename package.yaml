@@ -26,6 +26,7 @@ dependencies:
 - discord-haskell >= 1.5
 - stm >= 2.5
 - attoparsec >= 0.13.2
+- random >= 1.1
 
 library:
   source-dirs: src
