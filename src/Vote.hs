@@ -7,7 +7,8 @@ import Discord.Types
 
 data Vote =
   NoVote |
-  VoteInProgress { responses :: M.Map UserId Text
+  VoteInProgress { messages :: M.Map MessageId UserId
+                 , responses :: M.Map UserId [Text]
                  , purpose :: Text
                  , announceChannel :: ChannelId}
           deriving (Eq, Show)

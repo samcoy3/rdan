@@ -113,6 +113,7 @@ enactCommand disc _ m (Roll quant sides) = do
     " ⟵ " <>
     (T.pack . show $ rolls)
 
+-- TODO: This handles failure to establish message channels very poorly.
 enactCommand disc (v, _) m (NewVote purpose') = do
   currentVote <- readTVarIO v
   case currentVote of
@@ -121,25 +122,26 @@ enactCommand disc (v, _) m (NewVote purpose') = do
                          (messageChannel m)
                          "There is currently a vote in progress; you cannot start a new vote at this time."
     NoVote -> do
+      userHandles <- getDMs disc Config.players
+      messageHandles <- mapM ((\c -> restCall disc $ R.CreateMessage c $ "A new vote has begun! Please react to this message with a tick or a cross in order to vote.**" `T.append` purpose' `T.append` "**:") . channelId) userHandles
       atomically $ writeTVar v VoteInProgress
-        { responses = M.empty
+        { messages = M.fromList $ zip (map messageId $ rights messageHandles) Config.players
+        , responses = M.fromList $ zip Config.players $ repeat []
         , purpose = purpose'
         , announceChannel = messageChannel m}
-      userHandles <- getDMs disc Config.players
-      mapM_ ((\c -> sendMessage disc c $ "A new vote has begun! Please write a response to this message to vote on the matter of **" `T.append` purpose' `T.append` "**:") . channelId) userHandles
 
 enactCommand disc (v, _) m (VoteStatus) = do
   currentVote <- readTVarIO v
   sendMessage disc (messageChannel m) $
     case currentVote of
       NoVote -> "There is not currently a vote in progress."
-      VoteInProgress r p _ ->
+      VoteInProgress _ r p _ ->
         "There is currently a vote in progress on the matter of **" `T.append`
         p `T.append`
         "**. So far, out of the required " `T.append`
         (T.pack . show . length $ Config.players) `T.append`
         " players, " `T.append`
-        (T.pack . show . length . M.keys $ r) `T.append`
+        (T.pack . show . M.size . M.filter (/= []) $ r) `T.append`
         " have voted."
 
 enactCommand disc (v, _) m (EndVote) = do
@@ -147,13 +149,7 @@ enactCommand disc (v, _) m (EndVote) = do
   case stateOfVote of
     NoVote -> sendMessage disc (messageChannel m)
               "There is currently no vote to end."
-    VoteInProgress{} -> do
-      atomically $ writeTVar v NoVote
-      sendMessage disc (announceChannel stateOfVote) $
-        "The vote on **" `T.append`
-        purpose stateOfVote `T.append`
-        "** has been concluded. The results are:\n" `T.append`
-        T.unlines ["**" `T.append` T.pack (Config.playerNames M.! p) `T.append` "**: " `T.append` e | (p,e) <- M.toList (responses stateOfVote)]
+    VoteInProgress{} -> endVote disc v
 
 --- MISC ---
 
@@ -182,3 +178,13 @@ getDMs disc (u:us) = do
   case channel of
     Left _ -> return restChannels
     Right c -> return $ c : restChannels
+
+endVote :: DiscordHandle -> TVar Vote -> IO ()
+endVote disc v = do
+  stateOfVote <- readTVarIO v
+  atomically $ writeTVar v NoVote
+  sendMessage disc (announceChannel stateOfVote) $
+    "The vote on **" `T.append`
+    purpose stateOfVote `T.append`
+    "** has been concluded. The results are:\n" `T.append`
+    T.unlines ["**" `T.append` T.pack (Config.playerNames M.! p) `T.append` "**: " `T.append` (T.unwords e) | (p,e) <- M.toList (responses stateOfVote)]
