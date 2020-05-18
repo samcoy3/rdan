@@ -1,6 +1,8 @@
 # Changelog for rdan
 
 ## Unreleased changes
+### Changed
+- Voting now takes place using reactions.
 
 ## [0.2] - 2020-05-17
 ### Added

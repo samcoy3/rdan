@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Main where
 
@@ -7,6 +8,7 @@ import Vote
 import Commands
 import CommandParser
 
+import Data.List
 import qualified Data.Text as T
 import qualified Data.Map as M
 import qualified Data.Text.IO as TIO
@@ -39,7 +41,9 @@ handleEvent g disc event = case event of
                         Right channel' ->
                           if channelIsInGuild channel'
                           then handleServerMessage g disc event
-                          else handleDM g disc event
+                          else return ()
+  MessageReactionAdd reactInfo -> addReactToVote disc g reactInfo
+  MessageReactionRemove reactInfo -> removeReactFromVote disc g reactInfo
   _ -> return ()
 
 handleServerMessage :: GameState -> DiscordHandle -> Event -> IO ()
@@ -50,27 +54,38 @@ handleServerMessage g disc (MessageCreate m) =
 
 handleServerMessage _ _ _ = return ()
 
---- DMS ---
+--- DM Voting ---
+addReactToVote :: DiscordHandle -> GameState -> ReactionInfo -> IO ()
+addReactToVote disc g@(vote, _) reactInfo = do
+  currentVote <- readTVarIO vote
+  case currentVote of
+    NoVote -> return ()
+    VoteInProgress m r _ _ ->
+      if ((reactionMessageId reactInfo) `notElem` M.keys m)
+        then return ()
+        else do
+        atomically $
+          modifyTVar vote
+          (\v -> v {responses = M.adjust
+                                (\t -> t++[emojiName . reactionEmoji $ reactInfo])
+                                (m M.! (reactionMessageId reactInfo))
+                                r})
+        newVoteState <- readTVarIO vote
+        if (M.size . M.filter (/= []) $ responses newVoteState) == length Config.players
+          then endVote disc vote
+          else return ()
 
--- Handles a DM.
--- If there's a vote in progress and the DMing user has not voted, then records the vote.
--- If this vote ends the vote, then ends the vote.
--- If the user isn't eligible or has already voted, then ignores the vote.
-handleDM :: GameState -> DiscordHandle -> Event -> IO ()
-handleDM g@(vote, _) disc event = case event of
-  MessageCreate m -> do
-    currentVote <- readTVarIO vote
-    case currentVote of
-       NoVote -> return ()
-       VoteInProgress r _ _ -> if (user `elem` M.keys r) || (user `elem` Config.players)
-                               then return ()
-                               else do
-         Commands.sendMessage disc (messageChannel m) "Your response has been recorded"
-         atomically $ modifyTVar vote (\v -> v {responses = M.insert user (messageText m) (responses currentVote)})
-         newStateOfVote <- readTVarIO vote
-         if (length . M.keys . responses $ newStateOfVote) == length Config.players
-           then enactCommand disc g m EndVote
-           else return ()
-           where user = userId . messageAuthor $ m
-  _ -> return ()
-
+removeReactFromVote :: DiscordHandle -> GameState -> ReactionInfo -> IO ()
+removeReactFromVote disc g@(vote, _) reactInfo = do
+  currentVote <- readTVarIO vote
+  case currentVote of
+    NoVote -> return ()
+    VoteInProgress m r _ _ -> do
+      if ((reactionMessageId reactInfo) `notElem` M.keys m)
+        then return ()
+        else atomically $
+             modifyTVar vote
+             (\v -> v {responses = M.adjust
+                        (\t -> delete (emojiName . reactionEmoji $ reactInfo) t)
+                        (m M.! (reactionMessageId reactInfo))
+                        r})
