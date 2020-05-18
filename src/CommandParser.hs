@@ -91,7 +91,7 @@ oneWordParser commandText command = asciiCI commandText >> return command
 
 parseUserId :: Parser UserId
 parseUserId = do
-  asciiCI "<@" <|> asciiCI "<@!"
+  asciiCI "<@!" <|> asciiCI "<@"
   uid <- read <$> many digit
   char '>'
   return uid

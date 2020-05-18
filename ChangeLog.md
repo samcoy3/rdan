@@ -4,6 +4,9 @@
 ### Changed
 - Voting now takes place using reactions.
 
+### Fixed
+- Fixed username tags failing to parse properly if the user had a nickname.
+
 ## [0.2] - 2020-05-17
 ### Added
 - Added !roll command
