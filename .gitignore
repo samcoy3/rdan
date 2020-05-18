@@ -1,5 +1,8 @@
 dist-newstyle/
 stack.yaml.lock
 src/Config-blank.hs
+src/config_backup
+src/Config.hs
+rdan.cabal
 .stack-work/
 *~
