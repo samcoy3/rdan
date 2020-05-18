@@ -123,7 +123,7 @@ enactCommand disc (v, _) m (NewVote purpose') = do
                          "There is currently a vote in progress; you cannot start a new vote at this time."
     NoVote -> do
       userHandles <- getDMs disc Config.players
-      messageHandles <- mapM ((\c -> restCall disc $ R.CreateMessage c $ "A new vote has begun! Please react to this message with a tick or a cross in order to vote.**" `T.append` purpose' `T.append` "**:") . channelId) userHandles
+      messageHandles <- mapM ((\c -> restCall disc $ R.CreateMessage c $ "A new vote has begun, on the matter of **" <> purpose' <> "**! Please react to this message with a tick or a cross in order to vote.") . channelId) userHandles
       atomically $ writeTVar v VoteInProgress
         { messages = M.fromList $ zip (map messageId $ rights messageHandles) Config.players
         , responses = M.fromList $ zip Config.players $ repeat []
