@@ -9,18 +9,22 @@ import Data.Text (Text)
 import qualified Data.Map as M
 import Control.Monad.STM
 import Control.Concurrent.STM.TVar
+import Data.Time.Clock
+import Data.Time.Calendar
+import Data.Time.LocalTime
 import System.Random
 import Text.Read
 
 import Vote
 import Config
+import Util
 
 import Discord
 import Discord.Types
 import qualified Discord.Requests as R
 
 type ScoreMap = M.Map UserId Int
-type GameState = (TVar Vote, TVar ScoreMap)
+type GameState = (TVar Votes, TVar ScoreMap)
 
 --- Command type ---
 
@@ -32,16 +36,10 @@ data Command =
   | Find Retrievable
   | FindInline [Retrievable]
   | Roll Int Int
-  | NewVote Text
-  | VoteStatus
-  | EndVote
+  | NewVote (EndCondition (Either NominalDiffTime (Int, Int))) Text
+  | VoteStatus (Maybe [VoteId])
+  | EndVote [VoteId]
   deriving (Show, Eq)
-
--- A utility for sending messages. Currently we ignore whether it was successful.
-sendMessage :: DiscordHandle -> ChannelId -> Text -> IO ()
-sendMessage disc channel m = do
-  _ <- restCall disc $ R.CreateMessage channel m
-  return ()
 
 --- COMMAND ACTION ---
 
@@ -114,42 +112,73 @@ enactCommand disc _ m (Roll quant sides) = do
     (T.pack . show $ rolls)
 
 -- TODO: This handles failure to establish message channels very poorly.
-enactCommand disc (v, _) m (NewVote purpose') = do
-  currentVote <- readTVarIO v
-  case currentVote of
-    VoteInProgress {} -> sendMessage
-                         disc
-                         (messageChannel m)
-                         "There is currently a vote in progress; you cannot start a new vote at this time."
-    NoVote -> do
-      userHandles <- getDMs disc Config.players
-      messageHandles <- mapM ((\c -> restCall disc $ R.CreateMessage c $ "A new vote has begun! Please react to this message with a tick or a cross in order to vote.**" `T.append` purpose' `T.append` "**:") . channelId) userHandles
-      atomically $ writeTVar v VoteInProgress
-        { messages = M.fromList $ zip (map messageId $ rights messageHandles) Config.players
-        , responses = M.fromList $ zip Config.players $ repeat []
-        , purpose = purpose'
-        , announceChannel = messageChannel m}
+-- TODO: Time handling is pretty shocking, but can probably be cleaner.
+enactCommand disc (v, _) m (NewVote endCon purpose') = do
+  let timeFromHM (h', m') =
+        (do
+            currentTime <- getCurrentTime
+            if (localTimeOfDay . utcToLocalTime bst) currentTime > TimeOfDay {todHour = h', todMin = m', todSec = 0}
+              then return . localTimeToUTC bst $
+                   LocalTime { localDay = addDays 1 (utctDay currentTime)
+                             , localTimeOfDay = TimeOfDay { todHour = h'
+                                                          , todMin = m'
+                                                          , todSec = 0}}
+              else return . localTimeToUTC bst $
+                   LocalTime { localDay = utctDay currentTime
+                             , localTimeOfDay = TimeOfDay { todHour = h'
+                                                          , todMin = m'
+                                                          , todSec = 0}})
+  currentVotes <- readTVarIO v
+  endCon' <- case endCon of
+    AllVoted -> return AllVoted
+    (AllVotedOrTimeUp (Left diffTime)) -> getCurrentTime
+      >>= return . AllVotedOrTimeUp . (addUTCTime diffTime)
+    (TimeUp (Left diffTime)) -> getCurrentTime
+      >>= return . TimeUp . (addUTCTime diffTime)
+    (AllVotedOrTimeUp (Right (h, m))) -> timeFromHM ( fromIntegral h
+                                                    , fromIntegral m)
+      >>= return . AllVotedOrTimeUp
+    (TimeUp (Right (h, m))) -> timeFromHM ( fromIntegral h
+                                          , fromIntegral m)
+      >>= return . TimeUp
 
-enactCommand disc (v, _) m (VoteStatus) = do
-  currentVote <- readTVarIO v
-  sendMessage disc (messageChannel m) $
-    case currentVote of
-      NoVote -> "There is not currently a vote in progress."
-      VoteInProgress _ r p _ ->
-        "There is currently a vote in progress on the matter of **" `T.append`
-        p `T.append`
-        "**. So far, out of the required " `T.append`
-        (T.pack . show . length $ Config.players) `T.append`
-        " players, " `T.append`
-        (T.pack . show . M.size . M.filter (/= []) $ r) `T.append`
-        " have voted."
+  userHandles <- getDMs disc Config.players
+  messageHandles <- mapM ((\c -> restCall disc
+                            $ R.CreateMessage c
+                            $ "A new vote has begun on the subject of **" <> purpose' <> "**! " <> endConditionDescription endCon' <> " Please react to this message with a tick or a cross in order to vote:") . channelId) userHandles
+  let newid = (+1) $ max 0 (if (M.keys currentVotes) == []
+                            then 0
+                            else maximum . M.keys $ currentVotes)
+  sendMessage disc (messageChannel m) $ "A new vote has been started, and players have been notified. The vote ID is #" <> (T.pack . show) newid
+  atomically $ modifyTVar v
+    (M.insert newid (Vote { messages = M.fromList $ zip (map messageId $ rights messageHandles) Config.players
+                          , responses = M.fromList $ zip Config.players $ repeat []
+                          , purpose = purpose'
+                          , announceChannel = messageChannel m
+                          , endCondition = endCon'}))
 
-enactCommand disc (v, _) m (EndVote) = do
-  stateOfVote <- readTVarIO v
-  case stateOfVote of
-    NoVote -> sendMessage disc (messageChannel m)
-              "There is currently no vote to end."
-    VoteInProgress{} -> endVote disc v
+enactCommand disc (v, _) m (VoteStatus voteids) = do
+  currentVotes <- readTVarIO v
+  case voteids of
+    Nothing -> sendMessage disc (messageChannel m) $
+               if M.null currentVotes
+               then "There are no votes ongoing."
+               else "The current active votes are as follows:\n" <>
+                    (T.unlines ["**Vote #" <> (T.pack . show) vid <> "**: " <> describe vote | (vid, vote) <- M.toList currentVotes])
+    Just voteids -> sendMessage disc (messageChannel m) $
+                    T.unlines $ (flip map voteids)
+                    (\v -> if v `elem` (M.keys currentVotes)
+                              then "**Vote #" <> (T.pack . show) v <> "**: " <> describe (currentVotes M.! v)
+                              else "There is no vote with the vote ID #" <> (T.pack . show) v)
+
+enactCommand disc g@(v, _) m (EndVote (vote:vs)) = do
+  currentVotes <- readTVarIO v
+  if vote `elem` (M.keys currentVotes)
+    then endVote disc v vote
+    else sendMessage disc (messageChannel m) $
+         "There is no vote with the vote ID #" <> (T.pack . show) vote
+  enactCommand disc g m (EndVote vs)
+enactCommand _ _ _ (EndVote []) = return ()
 
 --- MISC ---
 
@@ -178,13 +207,3 @@ getDMs disc (u:us) = do
   case channel of
     Left _ -> return restChannels
     Right c -> return $ c : restChannels
-
-endVote :: DiscordHandle -> TVar Vote -> IO ()
-endVote disc v = do
-  stateOfVote <- readTVarIO v
-  atomically $ writeTVar v NoVote
-  sendMessage disc (announceChannel stateOfVote) $
-    "The vote on **" `T.append`
-    purpose stateOfVote `T.append`
-    "** has been concluded. The results are:\n" `T.append`
-    T.unlines ["**" `T.append` T.pack (Config.playerNames M.! p) `T.append` "**: " `T.append` (T.unwords e) | (p,e) <- M.toList (responses stateOfVote)]

@@ -27,6 +27,7 @@ dependencies:
 - stm >= 2.5
 - attoparsec >= 0.13.2
 - random >= 1.1
+- time >= 1.9
 
 library:
   source-dirs: src
