@@ -33,6 +33,7 @@ data Vote = Vote { messages :: M.Map MessageId UserId
                  , purpose :: Text
                  , announceChannel :: ChannelId
                  , endCondition :: EndCondition UTCTime}
+            deriving (Show)
 
 --- Vote Poller ---
 -- This function checks, every minute, whether a vote has ended.

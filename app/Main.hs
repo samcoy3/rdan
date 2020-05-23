@@ -57,37 +57,45 @@ handleServerMessage g disc (MessageCreate m) =
 handleServerMessage _ _ _ = return ()
 
 --- DM Voting ---
+-- TODO: Small race condition here involving the vote ending. Shouldn't be a problem though.
 addReactToVote :: DiscordHandle -> GameState -> ReactionInfo -> IO ()
-addReactToVote disc g@(vote, _) reactInfo = undefined-- do
-  -- currentVotes <- readTVarIO vote
-  -- case currentVote of
-  --   NoVote -> return ()
-  --   VoteInProgress m r _ _ ->
-  --     if ((reactionMessageId reactInfo) `notElem` M.keys m)
-  --       then return ()
-  --       else do
-  --       atomically $
-  --         modifyTVar vote
-  --         (\v -> v {responses = M.adjust
-  --                               (\t -> t++[emojiName . reactionEmoji $ reactInfo])
-  --                               (m M.! (reactionMessageId reactInfo))
-  --                               r})
-  --       newVoteState <- readTVarIO vote
-  --       if (M.size . M.filter (/= []) $ responses newVoteState) == length Config.players
-  --         then endVote disc vote
-  --         else return ()
+addReactToVote disc g@(votes, _) reactInfo = do
+  currentVotes <- readTVarIO votes
+  let correspondingVotes = M.filter
+                           (\vote -> (reactionMessageId reactInfo) `elem` (M.keys . messages $ vote))
+                           currentVotes
+  if M.null correspondingVotes
+    then return ()
+    else do
+    let (voteid, vote) = (head . M.toList) correspondingVotes
+    atomically . modifyTVar votes $
+      M.adjust
+      (\vote -> vote {responses = M.adjust
+                       (\t -> t++[emojiName . reactionEmoji $ reactInfo])
+                       ((messages vote) M.! (reactionMessageId reactInfo))
+                       (responses vote)})
+      voteid
+    newVotes <- readTVarIO votes
+    if (M.size . M.filter (/= []) $ responses (newVotes M.! voteid)) == length Config.players
+      then (case endCondition (newVotes M.! voteid) of
+              TimeUp _ -> return ()
+              _ ->  endVote disc votes voteid)
+      else return ()
 
 removeReactFromVote :: DiscordHandle -> GameState -> ReactionInfo -> IO ()
-removeReactFromVote disc g@(vote, _) reactInfo = undefined-- do
-  -- currentVote <- readTVarIO vote
-  -- case currentVote of
-  --   NoVote -> return ()
-  --   VoteInProgress m r _ _ -> do
-  --     if ((reactionMessageId reactInfo) `notElem` M.keys m)
-  --       then return ()
-  --       else atomically $
-  --            modifyTVar vote
-  --            (\v -> v {responses = M.adjust
-  --                       (\t -> delete (emojiName . reactionEmoji $ reactInfo) t)
-  --                       (m M.! (reactionMessageId reactInfo))
-  --                       r})
+removeReactFromVote disc g@(votes, _) reactInfo = do
+  currentVotes <- readTVarIO votes
+  let correspondingVotes = M.filter
+                           (\vote -> (reactionMessageId reactInfo) `elem` (M.keys . messages $ vote))
+                           currentVotes
+  if M.null correspondingVotes
+    then return ()
+    else do
+    let (voteid, vote) = (head . M.toList) correspondingVotes
+    atomically . modifyTVar votes $
+      M.adjust
+      (\vote -> vote {responses = M.adjust
+                       (\t -> delete (emojiName . reactionEmoji $ reactInfo) t)
+                       ((messages vote) M.! (reactionMessageId reactInfo))
+                       (responses vote)})
+      voteid
