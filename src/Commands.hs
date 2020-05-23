@@ -187,7 +187,6 @@ enactCommand disc g@(v, _) m (EndVote (vote:vs)) = do
          "There is no vote with the vote ID #" <> (T.pack . show) vote
   enactCommand disc g m (EndVote vs)
 enactCommand _ _ _ (EndVote []) = return ()
->>>>>>> voting-overhaul
 
 --- MISC ---
 

@@ -1,7 +1,12 @@
 # Changelog for rdan
 
 ## Unreleased changes
+
+## [0.3] - 2020-05-23
 ### Changed
+- Multiple votes can now be run in parallel.
+- !newvote, !votestatus, and !endvote have all changed to accommodate this functionality.
+- Votes can now be set to either end after everyone has voted, end after a specified time, or both.
 - Voting now takes place using reactions.
 
 ### Fixed
