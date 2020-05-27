@@ -4,6 +4,7 @@ module CommandParser where
 
 import Commands
 import Vote
+import Config
 
 import Data.Char
 import Data.Text (Text, unpack)
@@ -21,6 +22,7 @@ commandParser = helpParser
                 <|> addToScoreParser
                 <|> findParser
                 <|> rollParser
+                <|> newVoteLongParser
                 <|> newVoteParser
                 <|> voteStatusParser
                 <|> endVoteParser
@@ -75,8 +77,8 @@ rollParser = do
   sidedness <- decimal
   return $ Roll quantity sidedness
 
-newVoteParser :: Parser Command
-newVoteParser = do
+newVoteLongParser :: Parser Command
+newVoteLongParser = do
   asciiCI "!newvote"
   skipSpace
   endCondition <- choice [ asciiCI "after"
@@ -104,6 +106,25 @@ newVoteParser = do
   skipSpace
   purpose <- takeText
   return $ NewVote endCondition purpose
+
+newVoteParser :: Parser Command
+newVoteParser = do
+  asciiCI "!newvote"
+  skipSpace
+  canEndEarlyWithVotes <- option True $ char '!' >> return False
+  timeConstraint <- option Nothing $
+    Just <$> choice [ Left <$> parseDiffTime
+                    , Right <$> parseTimeOfDay ]
+  skipSpace
+  votePurpose <- takeText
+  endCondition <- if canEndEarlyWithVotes
+                  then case timeConstraint of
+                         Nothing -> return AllVoted
+                         Just x -> return $ AllVotedOrTimeUp x
+                  else case timeConstraint of
+                         Nothing -> fail "This vote would not end."
+                         Just x -> return $ TimeUp x
+  return $ NewVote endCondition votePurpose
 
 voteStatusParser :: Parser Command
 voteStatusParser = do
@@ -146,18 +167,22 @@ parseDiffTime = do
   days <- fromIntegral <$> option 0 (parseQuant 'd')
   hours <- fromIntegral <$> option 0 (parseQuant 'h')
   minutes <- fromIntegral <$> option 0 (parseQuant 'm')
-  return $ secondsToNominalDiffTime $ days * 86400 + hours * 3600 + minutes * 60
+  if days == 0 && hours == 0 && minutes == 0
+    then fail "Invalid duration"
+    else return $
+         secondsToNominalDiffTime $ days * 86400 + hours * 3600 + minutes * 60
     where
       parseQuant c = do
         quant <- decimal
         char c
         return quant
 
-parseTimeOfDay :: Parser (Int, Int)
+parseTimeOfDay :: Parser AbsoluteTime
 parseTimeOfDay = do
   hours <- read <$> count 2 digit
   char ':'
   minutes <- read <$> count 2 digit
+  dayOffset <- option 0 $ char '+' >> decimal
   if hours >= 0 && hours < 24 && minutes >= 0 && minutes < 60
-    then return (hours, minutes)
+    then return AbsTime { hours = hours, minutes = minutes, dayOffset = dayOffset }
     else fail "Invalid time"

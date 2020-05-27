@@ -1,6 +1,14 @@
 # Changelog for rdan
 
 ## Unreleased changes
+### Added
+- Added a new shorthand to specify voting options.
+
+### Changed
+- Changed the voting options help text.
+
+### Deprecated
+- Deprecated the old syntax for specifying voting options.
 
 ## [0.3] - 2020-05-23
 ### Changed

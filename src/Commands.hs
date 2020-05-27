@@ -28,6 +28,9 @@ type GameState = (TVar Votes, TVar ScoreMap)
 
 --- Command type ---
 
+data AbsoluteTime = AbsTime { hours :: Int
+                            , minutes :: Int
+                            , dayOffset :: Integer } deriving (Show, Eq)
 data Retrievable = Rule Int | Motion Int deriving (Show, Eq)
 data Command =
   Help (Maybe Text)
@@ -36,7 +39,7 @@ data Command =
   | Find Retrievable
   | FindInline [Retrievable]
   | Roll Int Int
-  | NewVote (EndCondition (Either NominalDiffTime (Int, Int))) Text
+  | NewVote (EndCondition (Either NominalDiffTime AbsoluteTime)) Text
   | VoteStatus (Maybe [VoteId])
   | EndVote [VoteId]
   deriving (Show, Eq)
@@ -64,12 +67,13 @@ enactCommand disc _ m (Help s) = sendMessage disc (messageChannel m)
                    <> "Rolls a d`<y>`dice `<x>` times and displays the results."
     Just "newvote" -> "Usage: `!newvote <end_condition> <purpose...`\n"
                       <> "Starts a new vote on the subject of `<purpose>`.\n"
-                      <> "`end_condition` determines how the vote ends. It can be one of five things:\n"
-                      <> "- `all votes`: Ends the vote after everyone has voted.\n"
-                      <> "- `after XXdYYhZZm`: Ends the vote after XX days, YY hours, and ZZ minutes (you can omit any of these, e.g. XXhYYm).\n"
-                      <> "- `at XX:YY`: Ends the vote at the next XX:YY, where XX:YY is a 24-hour time. For example, `at 13:00` will end the vote at 13:00 today if it's before 13:00 now, otherwise it will end it tomorrow at 13:00.\n"
-                      <> "- `all votes or after XXdYYhZZm`: Ends the vote after everyone has voted, or the specified interval, whichever comes first.\n"
-                      <> "- `all votes or at XX:YY`: Ends the vote after everyone has voted, or at the specified time, whichever comes first.\n"
+                      <> "`end_condition` determines how the vote ends. It is constructed as follows:\n"
+                      <> "- Firstly, if there is a `!` at the beginning of `end_condition` then the vote will not end when all votes are in.\n"
+                      <> "- Next, optional time constraints can be specified. To specify a period of time, use the syntax `XXdYYhZZm`, where `XX`, `YY`, and `ZZ` are numbers denoting how many days, minutes, and seconds the vote is to last. Parts of this can be omitted, e.g. `YYhZZm`. Alternatively, you can specify the precise time the vote is to end using `HH:MM+D` syntax, where `HH` is the hours (in the 24 hour clock), `MM` is the minutes, and `DD` is the offset in days from the next instance of that time.\n"
+                      <> "\nExamples:\n "
+                      <> "- `!newvote Apples` will start a new vote on the subject of Apples. The vote will only end when everyone has voted.\n"
+                      <> "- `!newvote 24h Derek` will start a new vote on the subject of Derek. The vote lasts 24 hours, but can end early (if everyone votes before then).\n"
+                      <> "- `!newvote !18:00+1 Snakes` will start a new vote on the subject of Snakes. The vote will end at the 18:00 after next (if this vote was proposed on Tuesday at 1700, this would be Wednesday at 1800; if this vote was proposed on Tuesday at 1900, this would be Thursday at 1900). The vote may not end early, even if everyone has voted."
     Just "votestatus" -> "Usage: `!votestatus [#XX #YY...`\n"
                          <> "Queries the status of the ongoing votes. Will show how many people have voted, and display the subject of the vote.\n"
                          <> "You can optionally supply one or several vote IDs in order to restrict your query to those votes, e.g. `!votestatus #23`."
@@ -122,20 +126,6 @@ enactCommand disc _ m (Roll quant sides) = do
 -- TODO: This handles failure to establish message channels very poorly.
 -- TODO: Time handling is pretty shocking, but can probably be cleaner.
 enactCommand disc (v, _) m (NewVote endCon purpose') = do
-  let timeFromHM (h', m') =
-        (do
-            currentTime <- getCurrentTime
-            if (localTimeOfDay . utcToLocalTime bst) currentTime > TimeOfDay {todHour = h', todMin = m', todSec = 0}
-              then return . localTimeToUTC bst $
-                   LocalTime { localDay = addDays 1 (utctDay currentTime)
-                             , localTimeOfDay = TimeOfDay { todHour = h'
-                                                          , todMin = m'
-                                                          , todSec = 0}}
-              else return . localTimeToUTC bst $
-                   LocalTime { localDay = utctDay currentTime
-                             , localTimeOfDay = TimeOfDay { todHour = h'
-                                                          , todMin = m'
-                                                          , todSec = 0}})
   currentVotes <- readTVarIO v
   endCon' <- case endCon of
     AllVoted -> return AllVoted
@@ -143,11 +133,11 @@ enactCommand disc (v, _) m (NewVote endCon purpose') = do
       >>= return . AllVotedOrTimeUp . (addUTCTime diffTime)
     (TimeUp (Left diffTime)) -> getCurrentTime
       >>= return . TimeUp . (addUTCTime diffTime)
-    (AllVotedOrTimeUp (Right (h, m))) -> timeFromHM ( fromIntegral h
-                                                    , fromIntegral m)
+    (AllVotedOrTimeUp (Right abs)) -> utcFromHoursMinutesDayOffset
+      (hours abs, minutes abs, dayOffset abs)
       >>= return . AllVotedOrTimeUp
-    (TimeUp (Right (h, m))) -> timeFromHM ( fromIntegral h
-                                          , fromIntegral m)
+    (TimeUp (Right abs)) -> utcFromHoursMinutesDayOffset
+      (hours abs, minutes abs, dayOffset abs)
       >>= return . TimeUp
 
   userHandles <- getDMs disc Config.players
