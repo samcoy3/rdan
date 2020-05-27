@@ -82,15 +82,12 @@ enactCommand disc _ m (Help s) = sendMessage disc (messageChannel m)
                       <> "Note that a vote will end automatically once every player has voted or the time has been reached anyway; you should use this command only if you want to end the vote prior to everyone having voted."
     )
 
-enactCommand disc (_, s) m PrintScores = do
-  currentScores <- readTVarIO s
-  let scoreText = "The current scores are:\n"
-        `T.append` T.unlines [T.pack $ (Config.playerNames M.! p) ++ ": " ++ show score | (p,score) <- M.toList currentScores]
-  sendMessage disc (messageChannel m) scoreText
+enactCommand disc (_, s) m PrintScores = printScores disc s m
 
 enactCommand disc (_, s) m (AddToScore user delta) = do
   atomically $ modifyTVar s (M.update (pure . (+delta)) user)
   sendMessage disc (messageChannel m) "Scores updated."
+  printScores disc s m
 
 enactCommand disc _ m (Find x) = do
   result <- getRetrieveable disc x
@@ -179,6 +176,13 @@ enactCommand disc g@(v, _) m (EndVote (vote:vs)) = do
 enactCommand _ _ _ (EndVote []) = return ()
 
 --- MISC ---
+
+printScores :: DiscordHandle -> TVar ScoreMap -> Message -> IO ()
+printScores disc s m = do
+  currentScores <- readTVarIO s
+  let scoreText = "The current scores are:\n"
+        `T.append` T.unlines [T.pack $ (Config.playerNames M.! p) ++ ": " ++ show score | (p,score) <- M.toList currentScores]
+  sendMessage disc (messageChannel m) scoreText
 
 getRetrieveable :: DiscordHandle -> Retrievable -> IO (Either Retrievable Text)
 getRetrieveable disc retr =

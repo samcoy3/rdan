@@ -6,6 +6,7 @@
 
 ### Changed
 - Changed the voting options help text.
+- The !addscore command now prints the new scores.
 
 ### Deprecated
 - Deprecated the old syntax for specifying voting options.
