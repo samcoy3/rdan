@@ -36,7 +36,7 @@ data Vote = Vote { messages :: M.Map MessageId UserId
             deriving (Show)
 
 --- Vote Poller ---
--- This function checks, every minute, whether a vote has ended.
+-- This function frequently checks whether a vote has ended.
 votePoller :: DiscordHandle -> TVar Votes -> IO ()
 votePoller disc votes = do
   currentTime <- getCurrentTime
@@ -48,7 +48,7 @@ votePoller disc votes = do
                                      AllVotedOrTimeUp t -> currentTime > t)
                    $ currentVotes
   mapM_ (endVote disc votes) votesToEnd
-  threadDelay $ (1000000 * 60 :: Int) -- Sleeps for one minute
+  threadDelay $ (1000000 * 15 :: Int) -- Sleeps for fiteen seconds
   votePoller disc votes
 
 endVote :: DiscordHandle -> TVar Votes -> Int -> IO ()
