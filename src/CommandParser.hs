@@ -49,11 +49,13 @@ printScoresParser = oneWordParser "!scores" PrintScores
 addToScoreParser :: Parser Command
 addToScoreParser = do
   asciiCI "!addscore"
-  skipSpace
-  uid <- parseUserId
-  skipSpace
-  delta <- signed decimal
-  return $ AddToScore uid delta
+  changes <- many1 $ do
+    skipSpace
+    uid <- parseUserId
+    skipSpace
+    delta <- signed decimal
+    return $ (uid, delta)
+  return $ AddToScore changes
 
 findParser :: Parser Command
 findParser = do

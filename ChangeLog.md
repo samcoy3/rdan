@@ -7,6 +7,7 @@
 ### Changed
 - Changed the voting options help text.
 - The !addscore command now prints the new scores.
+- The !addscore command now accepts multiple pairs of users and deltas.
 - Changed frequency of vote-ending polling to every 15 seconds (from 60).
 
 ### Deprecated

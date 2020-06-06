@@ -35,7 +35,7 @@ data Retrievable = Rule Int | Motion Int deriving (Show, Eq)
 data Command =
   Help (Maybe Text)
   | PrintScores
-  | AddToScore UserId Int
+  | AddToScore [(UserId, Int)]
   | Find Retrievable
   | FindInline [Retrievable]
   | Roll Int Int
@@ -57,8 +57,8 @@ enactCommand disc _ m (Help s) = sendMessage disc (messageChannel m)
                <> "The list of commands available are as follows: `help`, `scores`, `addscore`, `rule`, `motion`, `newote`, `roll`, `votestatus`, `endvote`."
     Just "scores" -> "Usage: `!scores`\n"
                      <> "Displays the current scores of all the players."
-    Just "addscore" -> "Usage: `!addscore <player> <delta>`\n"
-                       <> "Changes `<player>`'s score by `<delta>`. You must tag `<player` to use this command."
+    Just "addscore" -> "Usage: `!addscore <player> <delta> [<player> <delta>...]`\n"
+                       <> "Changes `<player>`'s score by `<delta>`. You must tag `<player` to use this command. You can specify multiple players and changes. For example: `!addscore @Alice 3 @Bob -2` will increase Alice's score by 3 and decrease Bob's by 2."
     Just "rule" -> "Usage: `!rule <rule_number>`\n"
                    <> "Retrieves the rule numbered `<rule_number>`. You can also call this inline with `!r<rule_number>`."
     Just "motion" -> "Usage: `!motion <motion_number>`\n"
@@ -84,10 +84,12 @@ enactCommand disc _ m (Help s) = sendMessage disc (messageChannel m)
 
 enactCommand disc (_, s) m PrintScores = printScores disc s m
 
-enactCommand disc (_, s) m (AddToScore user delta) = do
-  atomically $ modifyTVar s (M.update (pure . (+delta)) user)
+enactCommand disc (_, s) m (AddToScore []) =
   sendMessage disc (messageChannel m) "Scores updated."
-  printScores disc s m
+    >> printScores disc s m
+enactCommand disc g@(_, s) m (AddToScore ((user, delta) : cs)) = do
+  atomically $ modifyTVar s (M.update (pure . (+ delta)) user)
+  enactCommand disc g m (AddToScore cs)
 
 enactCommand disc _ m (Find x) = do
   result <- getRetrieveable disc x
