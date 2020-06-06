@@ -1,6 +1,8 @@
 # Changelog for rdan
 
 ## Unreleased changes
+
+## [0.3.1] - 2020-06-06
 ### Added
 - Added a new shorthand to specify voting options.
 
