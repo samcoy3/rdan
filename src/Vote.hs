@@ -16,6 +16,7 @@ import Control.Monad
 import Control.Monad.STM
 import Control.Concurrent
 import Control.Concurrent.STM.TVar
+import Control.Monad.IO.Class
 import Data.Time.Clock
 import Data.Time.Format
 import Data.Time.LocalTime
@@ -37,29 +38,29 @@ data Vote = Vote { messages :: M.Map MessageId UserId
 
 --- Vote Poller ---
 -- This function frequently checks whether a vote has ended.
-votePoller :: DiscordHandle -> TVar Votes -> IO ()
-votePoller disc votes = do
-  currentTime <- getCurrentTime
-  currentVotes <- readTVarIO votes
+votePoller :: TVar Votes -> DiscordHandler ()
+votePoller votes = do
+  currentTime <- liftIO getCurrentTime
+  currentVotes <- readTVarDisc votes
   let votesToEnd = M.keys .
                    M.filter (\v -> case endCondition v of
                                      AllVoted -> False
                                      TimeUp t -> currentTime > t
                                      AllVotedOrTimeUp t -> currentTime > t)
                    $ currentVotes
-  mapM_ (endVote disc votes) votesToEnd
-  threadDelay $ (1000000 * 15 :: Int) -- Sleeps for fiteen seconds
-  votePoller disc votes
+  mapM_ (endVote votes) votesToEnd
+  liftIO . threadDelay $ (1000000 * 15 :: Int) -- Sleeps for fiteen seconds
+  votePoller votes
 
-endVote :: DiscordHandle -> TVar Votes -> Int -> IO ()
-endVote disc v voteid = do
-  stateOfVotes <- readTVarIO v
+endVote :: TVar Votes -> Int -> DiscordHandler ()
+endVote v voteid = do
+  stateOfVotes <- readTVarDisc v
   let particularVote = stateOfVotes M.!? voteid
   case particularVote of
     Nothing -> return ()
     Just vote -> do
-      atomically $ modifyTVar v (M.delete voteid)
-      sendMessage disc (announceChannel vote) $
+      liftIO . atomically $ modifyTVar v (M.delete voteid)
+      sendMessage (announceChannel vote) $
         "The vote on **" <>
         purpose vote <>
         "** has concluded. The results are:\n" <>

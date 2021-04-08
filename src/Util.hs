@@ -1,6 +1,10 @@
 module Util where
 
 import Data.Text
+import Control.Monad
+import Control.Concurrent.STM
+import Control.Concurrent.STM.TVar
+import Control.Monad.IO.Class
 
 import Discord
 import Discord.Types
@@ -11,10 +15,15 @@ import Data.Time.Clock
 import Data.Time.LocalTime
 
 -- A utility for sending messages. Currently we ignore whether it was successful.
-sendMessage :: DiscordHandle -> ChannelId -> Text -> IO ()
-sendMessage disc channel m = do
-  _ <- restCall disc $ R.CreateMessage channel m
-  return ()
+sendMessage :: ChannelId -> Text -> DiscordHandler ()
+sendMessage channel m = do
+  void . restCall $ R.CreateMessage channel m
+
+readTVarDisc :: TVar a -> DiscordHandler a
+readTVarDisc = liftIO . readTVarIO
+
+modifyTVarDisc :: TVar a -> (a -> a)-> DiscordHandler ()
+modifyTVarDisc var f = liftIO . atomically $ modifyTVar var f
 
 bst :: TimeZone
 bst = TimeZone { timeZoneMinutes = 60
