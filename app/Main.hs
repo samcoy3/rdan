@@ -1,3 +1,5 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Main where
 
 import Config
@@ -23,22 +25,33 @@ import Discord.Types
 import qualified Discord.Requests as R
 import Data.Attoparsec.Text as A
 
+import Data.Yaml (decodeFileEither)
+
 main :: IO ()
 main = do
   currentVotes <- newTVarIO M.empty
-  currentScores <- newTVarIO Config.scores
-  let gameState = (currentVotes, currentScores)
-  userReadableError <- runDiscord $ def
-                       { discordToken = Config.botToken
-                       , discordOnEvent = handleEvent gameState
-                       , discordOnStart = void $ ask >>= liftIO . forkIO . runReaderT (votePoller currentVotes)}
-  TIO.putStrLn userReadableError
+  decodeFileEither "config.yaml" >>= \case
+    Left e -> do
+      putStrLn (show e)
+      putStrLn "Unable to read config file. Please check that it is formatted correctly."
+    Right config -> do
+        currentScores <- newTVarIO . M.fromList $ zip (getPlayerIDs config) (repeat 0)
+        let gameState = (currentVotes, currentScores)
+        TIO.putStrLn (T.pack . show $ config)
+        userReadableError <- runDiscord $ def
+                        { discordToken = botToken config
+                        , discordOnEvent = \event -> runReaderT (handleEvent gameState event) config
+                        , discordOnStart = (do
+                            discordHandle <- ask
+                            liftIO . forkIO $ runReaderT (runReaderT (votePoller currentVotes) config) discordHandle
+                            return ())}
+        TIO.putStrLn userReadableError
 
-handleEvent :: GameState -> Event -> DiscordHandler ()
+handleEvent :: GameState -> Event -> BotM ()
 handleEvent g event = case event of
   MessageCreate m | userIsBot $ messageAuthor m -> return ()
                   | otherwise -> do
-                      channel <- restCall $ R.GetChannel (messageChannel m)
+                      channel <- lift . restCall $ R.GetChannel (messageChannel m)
                       case channel of
                         Left _ -> return ()
                         Right channel' ->
@@ -49,7 +62,7 @@ handleEvent g event = case event of
   MessageReactionRemove reactInfo -> removeReactFromVote g reactInfo
   _ -> return ()
 
-handleServerMessage :: GameState -> Event -> DiscordHandler ()
+handleServerMessage :: GameState -> Event -> BotM ()
 handleServerMessage g (MessageCreate m) =
   case (A.parseOnly commandParser $ messageText m) of
     Left _ -> return ()
@@ -59,8 +72,9 @@ handleServerMessage _ _ = return ()
 
 --- DM Voting ---
 -- TODO: Small race condition here involving the vote ending. Shouldn't be a problem though.
-addReactToVote :: GameState -> ReactionInfo -> DiscordHandler ()
+addReactToVote :: GameState -> ReactionInfo -> BotM ()
 addReactToVote g@(votes, _) reactInfo = do
+  playerCount <- length <$> players <$> getConfig
   currentVotes <- readTVarDisc votes
   let correspondingVotes = M.filter
                            (\vote -> (reactionMessageId reactInfo) `elem` (M.keys . messages $ vote))
@@ -77,13 +91,13 @@ addReactToVote g@(votes, _) reactInfo = do
                        (responses vote)})
       voteid
     newVotes <- readTVarDisc votes
-    if (M.size . M.filter (/= []) $ responses (newVotes M.! voteid)) == length Config.players
+    if (M.size . M.filter (/= []) $ responses (newVotes M.! voteid)) == playerCount
       then (case endCondition (newVotes M.! voteid) of
               TimeUp _ -> return ()
               _ ->  endVote votes voteid)
       else return ()
 
-removeReactFromVote :: GameState -> ReactionInfo -> DiscordHandler ()
+removeReactFromVote :: GameState -> ReactionInfo -> BotM ()
 removeReactFromVote g@(votes, _) reactInfo = do
   currentVotes <- readTVarDisc votes
   let correspondingVotes = M.filter

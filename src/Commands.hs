@@ -5,6 +5,7 @@ import Data.Maybe
 import qualified Data.Text as T
 import Data.Text (Text)
 import qualified Data.Map as M
+import Control.Monad.Reader
 import Control.Monad.STM
 import Control.Monad.IO.Class
 import Control.Concurrent.STM.TVar
@@ -12,7 +13,7 @@ import Data.Time.Clock
 import Data.Time.Calendar
 import Data.Time.LocalTime
 import System.Random
-import Text.Read
+import Text.Read hiding (lift)
 
 import Vote
 import Config
@@ -45,7 +46,7 @@ data Command =
 
 --- COMMAND ACTION ---
 
-enactCommand :: GameState -> Message -> Command -> DiscordHandler ()
+enactCommand :: GameState -> Message -> Command -> BotM ()
 
 enactCommand _ m (Help s) = sendMessage (messageChannel m)
   (case s of
@@ -124,6 +125,7 @@ enactCommand _ m (Roll quant sides) = do
 -- TODO: This handles failure to establish message channels very poorly.
 -- TODO: Time handling is pretty shocking, but can probably be cleaner.
 enactCommand (v, _) m (NewVote endCon purpose') = do
+  players' <- getPlayerIDs <$> getConfig
   currentVotes <- readTVarDisc v
   endCon' <- liftIO $ case endCon of
     AllVoted -> return AllVoted
@@ -138,8 +140,8 @@ enactCommand (v, _) m (NewVote endCon purpose') = do
       (hours abs, minutes abs, dayOffset abs)
       >>= return . TimeUp
 
-  userHandles <- getDMs Config.players
-  messageHandles <- mapM ((\c -> restCall
+  userHandles <- getPlayerIDs <$> getConfig >>= getDMs
+  messageHandles <- mapM ((\c -> lift . restCall
                             $ R.CreateMessage c
                             $ "A new vote has begun on the subject of **" <> purpose' <> "**! " <> endConditionDescription endCon' <> " Please react to this message with a tick or a cross in order to vote:") . channelId) userHandles
   let newid = (+1) $ max 0 (if (M.keys currentVotes) == []
@@ -147,24 +149,25 @@ enactCommand (v, _) m (NewVote endCon purpose') = do
                             else maximum . M.keys $ currentVotes)
   sendMessage (messageChannel m) $ "A new vote has been started, and players have been notified. The vote ID is #" <> (T.pack . show) newid
   modifyTVarDisc v
-    (M.insert newid (Vote { messages = M.fromList $ zip (map messageId $ rights messageHandles) Config.players
-                          , responses = M.fromList $ zip Config.players $ repeat []
+    (M.insert newid (Vote { messages = M.fromList $ zip (map messageId $ rights messageHandles) players'
+                          , responses = M.fromList $ zip players' $ repeat []
                           , purpose = purpose'
                           , announceChannel = messageChannel m
                           , endCondition = endCon'}))
 
 enactCommand (v, _) m (VoteStatus voteids) = do
+  playerCount <- length <$> players <$> getConfig
   currentVotes <- readTVarDisc v
   case voteids of
     Nothing -> sendMessage (messageChannel m) $
                if M.null currentVotes
                then "There are no votes ongoing."
                else "The current active votes are as follows:\n" <>
-                    (T.unlines ["**Vote #" <> (T.pack . show) vid <> "**: " <> describe vote | (vid, vote) <- M.toList currentVotes])
+                    (T.unlines ["**Vote #" <> (T.pack . show) vid <> "**: " <> describe playerCount vote | (vid, vote) <- M.toList currentVotes])
     Just voteids -> sendMessage (messageChannel m) $
                     T.unlines $ (flip map voteids)
                     (\v -> if v `elem` (M.keys currentVotes)
-                              then "**Vote #" <> (T.pack . show) v <> "**: " <> describe (currentVotes M.! v)
+                              then "**Vote #" <> (T.pack . show) v <> "**: " <> describe playerCount (currentVotes M.! v)
                               else "There is no vote with the vote ID #" <> (T.pack . show) v)
 
 enactCommand g@(v, _) m (EndVote (vote:vs)) = do
@@ -178,17 +181,21 @@ enactCommand _ _ (EndVote []) = return ()
 
 --- MISC ---
 
-printScores :: TVar ScoreMap -> Message -> DiscordHandler ()
+printScores :: TVar ScoreMap -> Message -> BotM ()
 printScores s m = do
+  config <- getConfig
   currentScores <- readTVarDisc s
   let scoreText = "The current scores are:\n"
-        `T.append` T.unlines [T.pack $ (Config.playerNames M.! p) ++ ": " ++ show score | (p,score) <- M.toList currentScores]
+        `T.append` T.unlines [(getPlayerNameFromID config p) <> ": " <> (T.pack . show) score | (p,score) <- M.toList currentScores]
   sendMessage (messageChannel m) scoreText
 
-getRetrieveable :: Retrievable -> DiscordHandler (Either Retrievable Text)
+getRetrieveable :: Retrievable -> BotM (Either Retrievable Text)
 getRetrieveable retr =
   do
-    messages <- restCall $
+    channel <- case retr of
+      Rule _ -> rulesChannel <$> getConfig
+      Motion _ -> motionsChannel <$> getConfig
+    messages <- lift . restCall $
                 R.GetChannelMessages channel (100, R.LatestMessages)
     let validRules = filter
                      (\t -> T.pack ("**" ++ show retr ++ "**") `T.isPrefixOf` t)
@@ -197,15 +204,11 @@ getRetrieveable retr =
       if null validRules
       then Left retr
       else Right (head validRules)
-      where
-        channel = case retr of
-          Rule _ -> Config.rulesChannel
-          Motion _ -> Config.motionsChannel
 
-getDMs :: [UserId] -> DiscordHandler [Channel]
+getDMs :: [UserId] -> BotM [Channel]
 getDMs [] = return []
 getDMs (u:us) = do
-  channel <- restCall $ R.CreateDM u
+  channel <- lift . restCall $ R.CreateDM u
   restChannels <- getDMs us
   case channel of
     Left _ -> return restChannels

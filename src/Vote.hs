@@ -36,7 +36,7 @@ data Vote = Vote { messages :: M.Map MessageId UserId
 
 --- Vote Poller ---
 -- This function frequently checks whether a vote has ended.
-votePoller :: TVar Votes -> DiscordHandler ()
+votePoller :: TVar Votes -> BotM ()
 votePoller votes = do
   currentTime <- liftIO getCurrentTime
   currentVotes <- readTVarDisc votes
@@ -50,9 +50,10 @@ votePoller votes = do
   liftIO . threadDelay $ (1000000 * 15 :: Int) -- Sleeps for fiteen seconds
   votePoller votes
 
-endVote :: TVar Votes -> Int -> DiscordHandler ()
+endVote :: TVar Votes -> Int -> BotM ()
 endVote v voteid = do
   stateOfVotes <- readTVarDisc v
+  config <- getConfig
   let particularVote = stateOfVotes M.!? voteid
   case particularVote of
     Nothing -> return ()
@@ -62,14 +63,14 @@ endVote v voteid = do
         "The vote on **" <>
         purpose vote <>
         "** has concluded. The results are:\n" <>
-        T.unlines ["**" <> T.pack (Config.playerNames M.! p) <> "**: " <> (T.unwords e) | (p,e) <- M.toList (responses vote)]
+        T.unlines ["**" <> getPlayerNameFromID config p <> "**: " <> (T.unwords e) | (p,e) <- M.toList (responses vote)]
 
-describe :: Vote -> Text
-describe vote =
+describe :: Int -> Vote -> Text
+describe playerCount vote =
   "On the subject of **" <>
   purpose vote <>
   "**. So far, out of the " <>
-  (T.pack . show . length $ Config.players) <>
+  (T.pack . show $ playerCount) <>
   " players, " <>
   (T.pack . show . M.size . M.filter (/= []) $ responses vote) <>
   " have voted. " <>

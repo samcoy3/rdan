@@ -1,30 +1,58 @@
 module Config where
 
 import qualified Data.Map as M
-import Data.Text
+import Data.Text hiding (find)
+
+import qualified Data.Yaml as Y
+import Data.Yaml (FromJSON(..), (.:))
+import Data.Yaml.Aeson (withScientific)
+
+import Data.Foldable
 
 import Discord.Types
 
--- The Discord bot token
-botToken :: Text
-botToken = undefined
+data Player = Player
+  { playerName :: Text,
+    playerId :: UserId
+  }
+  deriving (Eq, Show)
 
--- The channel in which the rules are kept
-rulesChannel :: ChannelId
-rulesChannel = undefined
+data Config = Config
+  { botToken :: Text,
+    rulesChannel :: ChannelId,
+    motionsChannel :: ChannelId,
+    players :: [Player]
+  }
+  deriving (Eq, Show)
 
--- The channel in which the motions are kept
-motionsChannel :: ChannelId
-motionsChannel = undefined
+newtype BetterSnowflake = BetterSnowflake {convert :: Snowflake}
 
--- The list of UserIds to be polled for votes
-players :: [UserId]
-players = undefined
+instance FromJSON BetterSnowflake where
+  parseJSON = withScientific "Snowflake" (return . BetterSnowflake . Snowflake . floor . realToFrac)
 
--- The names of the players to be displayed in vote results and scores
-playerNames :: M.Map UserId String
-playerNames = undefined
+instance FromJSON Player where
+  parseJSON (Y.Object c) =
+    Player <$>
+    c .: "name" <*>
+    (convert <$> c .: "id")
+  parseJSON _ = fail "Failed to parse player"
 
--- The scores of the players on bot startup
-scores :: M.Map UserId Int
-scores = undefined
+instance FromJSON Config where
+  parseJSON (Y.Object c) =
+    Config <$>
+    c .: "bot-token" <*>
+    (convert <$> c .: "rules-channel") <*>
+    (convert <$> c .: "motions-channel") <*>
+    c .: "players"
+  parseJSON _ = fail "Failed to parse config"
+
+getPlayerNames :: Config -> [Text]
+getPlayerNames = fmap playerName <$> players
+
+getPlayerIDs :: Config -> [UserId]
+getPlayerIDs = fmap playerId <$> players
+
+getPlayerNameFromID :: Config -> UserId -> Text
+getPlayerNameFromID config uid =
+  maybe "Player not found" playerName $
+    find (\p -> playerId p == uid) (players config)

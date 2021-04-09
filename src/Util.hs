@@ -1,5 +1,7 @@
 module Util where
 
+import Config
+
 import Data.Text
 import Control.Monad
 import Control.Concurrent.STM
@@ -14,15 +16,22 @@ import Data.Time.Calendar
 import Data.Time.Clock
 import Data.Time.LocalTime
 
--- A utility for sending messages. Currently we ignore whether it was successful.
-sendMessage :: ChannelId -> Text -> DiscordHandler ()
-sendMessage channel m = do
-  void . restCall $ R.CreateMessage channel m
+import Control.Monad.Reader
 
-readTVarDisc :: TVar a -> DiscordHandler a
+type BotM = ReaderT Config DiscordHandler
+
+getConfig :: BotM Config
+getConfig = ask
+
+-- A utility for sending messages. Currently we ignore whether it was successful.
+sendMessage :: ChannelId -> Text -> BotM ()
+sendMessage channel m = do
+  lift . void . restCall $ R.CreateMessage channel m
+
+readTVarDisc :: TVar a -> BotM a
 readTVarDisc = liftIO . readTVarIO
 
-modifyTVarDisc :: TVar a -> (a -> a)-> DiscordHandler ()
+modifyTVarDisc :: TVar a -> (a -> a)-> BotM ()
 modifyTVarDisc var f = liftIO . atomically $ modifyTVar var f
 
 bst :: TimeZone
