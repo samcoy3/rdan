@@ -56,3 +56,7 @@ getPlayerNameFromID :: Config -> UserId -> Text
 getPlayerNameFromID config uid =
   maybe "Player not found" playerName $
     find (\p -> playerId p == uid) (players config)
+
+getPlayerIDFromName :: Config -> Text -> Maybe UserId
+getPlayerIDFromName config name=
+  playerId <$> find (\p -> playerName p == name) (players config)

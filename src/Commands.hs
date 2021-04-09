@@ -35,7 +35,7 @@ data Retrievable = Rule Int | Motion Int deriving (Show, Eq)
 data Command =
   Help (Maybe Text)
   | PrintScores
-  | AddToScore [(UserId, Int)]
+  | AddToScore [(Either UserId Text, Int)]
   | Find Retrievable
   | FindInline [Retrievable]
   | Roll Int Int
@@ -58,7 +58,7 @@ enactCommand _ m (Help s) = sendMessage (messageChannel m)
     Just "scores" -> "Usage: `!scores`\n"
                      <> "Displays the current scores of all the players."
     Just "addscore" -> "Usage: `!addscore <player> <delta> [<player> <delta>...]`\n"
-                       <> "Changes `<player>`'s score by `<delta>`. You must tag `<player` to use this command. You can specify multiple players and changes. For example: `!addscore @Alice 3 @Bob -2` will increase Alice's score by 3 and decrease Bob's by 2."
+                       <> "Changes `<player>`'s score by `<delta>`. You must tag `<player` or type their exact name to use this command. You can specify multiple players and changes. For example: `!addscore @Alice 3 Bob -2` will increase Alice's score by 3 and decrease Bob's by 2."
     Just "rule" -> "Usage: `!rule <rule_number>`\n"
                    <> "Retrieves the rule numbered `<rule_number>`. You can also call this inline with `!r<rule_number>`."
     Just "motion" -> "Usage: `!motion <motion_number>`\n"
@@ -87,9 +87,21 @@ enactCommand (_, s) m PrintScores = printScores s m
 enactCommand (_, s) m (AddToScore []) =
   sendMessage (messageChannel m) "Scores updated."
     >> printScores s m
-enactCommand g@(_, s) m (AddToScore ((user, delta) : cs)) = do
-  modifyTVarDisc s (M.update (pure . (+ delta)) user)
-  enactCommand  g m (AddToScore cs)
+enactCommand g@(_, s) m (AddToScore ((target, delta) : cs)) = do
+  player <- case target of
+    Left uid -> return $ Right uid
+    Right name -> do
+      config <- getConfig
+      case getPlayerIDFromName config name of
+        Nothing -> return $ Left name
+        Just uid -> return $ Right uid
+  case player of
+    Left text ->
+      sendMessage (messageChannel m) $
+      "Could not find player **" <> text <> "**."
+    Right uid ->
+      modifyTVarDisc s (M.update (pure . (+ delta)) uid)
+  enactCommand g m (AddToScore cs)
 
 enactCommand _ m (Find x) = do
   result <- getRetrieveable  x

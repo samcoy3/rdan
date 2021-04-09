@@ -37,6 +37,7 @@ library:
     - OverloadedStrings
     - RecordWildCards
     - MultiWayIf
+    - LambdaCase
 
 executables:
   rdan-exe:

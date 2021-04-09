@@ -2,8 +2,9 @@
 
 ## Unreleased changes
 ### Changed
-- Updated LTS to a more modern one.
+- Updated stackage snapshot to a more modern one.
 - Configuration is now done via a YAML file, rather than a .hs file.
+- !addscore now does not require you to tag the target player. Instead, you can type their name, as registered in the game.
 
 ## [0.3.1] - 2020-06-06
 ### Added
