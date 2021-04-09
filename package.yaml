@@ -33,6 +33,10 @@ dependencies:
 
 library:
   source-dirs: src
+  default-extensions:
+    - OverloadedStrings
+    - RecordWildCards
+    - MultiWayIf
 
 executables:
   rdan-exe:
