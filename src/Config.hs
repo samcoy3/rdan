@@ -1,5 +1,8 @@
 module Config where
 
+import Types
+
+import Control.Monad.Reader
 import qualified Data.Map as M
 import Data.Text hiding (find)
 
@@ -10,20 +13,6 @@ import Data.Yaml.Aeson (withScientific)
 import Data.Foldable
 
 import Discord.Types
-
-data Player = Player
-  { playerName :: Text,
-    playerId :: UserId
-  }
-  deriving (Eq, Show)
-
-data Config = Config
-  { botToken :: Text,
-    rulesChannel :: ChannelId,
-    motionsChannel :: ChannelId,
-    players :: [Player]
-  }
-  deriving (Eq, Show)
 
 newtype BetterSnowflake = BetterSnowflake {convert :: Snowflake}
 
@@ -45,6 +34,9 @@ instance FromJSON Config where
     (convert <$> c .: "motions-channel") <*>
     c .: "players"
   parseJSON _ = fail "Failed to parse config"
+
+getConfig :: BotM Config
+getConfig = asks fst
 
 getPlayerNames :: Config -> [Text]
 getPlayerNames = fmap playerName <$> players

@@ -1,7 +1,8 @@
 module Vote where
 
-import Config
 import Util
+import Config
+import Types
 
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -18,21 +19,6 @@ import Control.Monad.IO.Class
 import Data.Time.Clock
 import Data.Time.Format
 import Data.Time.LocalTime
-
-data EndCondition a =
-  AllVoted
-  | AllVotedOrTimeUp a
-  | TimeUp a
-  deriving (Eq, Show)
-
-type VoteId = Int
-type Votes = M.Map VoteId Vote
-data Vote = Vote { messages :: M.Map MessageId UserId
-                 , responses :: M.Map UserId [Text]
-                 , purpose :: Text
-                 , announceChannel :: ChannelId
-                 , endCondition :: EndCondition UTCTime}
-            deriving (Show)
 
 --- Vote Poller ---
 -- This function frequently checks whether a vote has ended.

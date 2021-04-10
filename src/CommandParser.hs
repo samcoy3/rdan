@@ -3,6 +3,7 @@ module CommandParser where
 import Commands
 import Vote
 import Config
+import Types
 
 import Data.Char
 import Data.Text (Text, unpack, pack)

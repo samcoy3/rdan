@@ -1,3 +1,5 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Main where
 
 import Config
@@ -5,6 +7,7 @@ import Vote
 import Commands
 import CommandParser
 import Util
+import Types
 
 import Data.List
 import qualified Data.Text as T
@@ -45,7 +48,7 @@ main = do
                             return ())}
         TIO.putStrLn userReadableError
 
-handleEvent :: GameState -> Event -> BotM ()
+handleEvent :: Event -> BotM ()
 handleEvent g event = case event of
   MessageCreate m | userIsBot $ messageAuthor m -> return ()
                   | otherwise -> do
@@ -60,7 +63,7 @@ handleEvent g event = case event of
   MessageReactionRemove reactInfo -> removeReactFromVote g reactInfo
   _ -> return ()
 
-handleServerMessage :: GameState -> Event -> BotM ()
+handleServerMessage :: Event -> BotM ()
 handleServerMessage g (MessageCreate m) =
   case (A.parseOnly commandParser $ messageText m) of
     Left _ -> return ()
@@ -70,7 +73,7 @@ handleServerMessage _ _ = return ()
 
 --- DM Voting ---
 -- TODO: Small race condition here involving the vote ending. Shouldn't be a problem though.
-addReactToVote :: GameState -> ReactionInfo -> BotM ()
+addReactToVote :: ReactionInfo -> BotM ()
 addReactToVote g@(votes, _) reactInfo = do
   playerCount <- length <$> players <$> getConfig
   currentVotes <- readTVarDisc votes

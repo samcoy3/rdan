@@ -1,6 +1,6 @@
 module Util where
 
-import Config
+import Types
 
 import Data.Text
 import Control.Monad
@@ -17,11 +17,6 @@ import Data.Time.Clock
 import Data.Time.LocalTime
 
 import Control.Monad.Reader
-
-type BotM = ReaderT Config DiscordHandler
-
-getConfig :: BotM Config
-getConfig = ask
 
 -- A utility for sending messages. Currently we ignore whether it was successful.
 sendMessage :: ChannelId -> Text -> BotM ()
