@@ -38,6 +38,7 @@ import qualified Data.Text as T
 import Data.Text (Text)
 import qualified Data.Map as M
 import Data.Map (Map)
+import Data.Yaml (encodeFile)
 
 import Discord
 import Discord.Types
@@ -71,7 +72,7 @@ getGameState :: BotM GameState
 getGameState = asks snd >>= readTVarDisc
 
 serialiseGameState :: BotM ()
-serialiseGameState = undefined
+serialiseGameState = getGameState >>= liftIO . encodeFile "game_state.yaml"
 
 modifyScore :: UserId -> Int -> BotM ()
 modifyScore target delta = do
