@@ -1,7 +1,4 @@
-module Vote where
-
-import Config
-import Util
+module Game.Vote where
 
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -16,14 +13,21 @@ import Control.Concurrent
 import Control.Concurrent.STM.TVar
 import Control.Monad.IO.Class
 import Data.Time.Clock
+import Data.Time.Calendar
 import Data.Time.Format
 import Data.Time.LocalTime
+import Data.Aeson.Types
+import Data.Yaml
+import GHC.Generics
 
 data EndCondition a =
   AllVoted
   | AllVotedOrTimeUp a
   | TimeUp a
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
+
+instance (ToJSON a) => ToJSON (EndCondition a)
+instance (FromJSON a) => FromJSON (EndCondition a)
 
 type VoteId = Int
 type Votes = M.Map VoteId Vote
@@ -32,38 +36,12 @@ data Vote = Vote { messages :: M.Map MessageId UserId
                  , purpose :: Text
                  , announceChannel :: ChannelId
                  , endCondition :: EndCondition UTCTime}
-            deriving (Show)
+            deriving (Show, Generic)
 
---- Vote Poller ---
--- This function frequently checks whether a vote has ended.
-votePoller :: TVar Votes -> BotM ()
-votePoller votes = do
-  currentTime <- liftIO getCurrentTime
-  currentVotes <- readTVarDisc votes
-  let votesToEnd = M.keys .
-                   M.filter (\v -> case endCondition v of
-                                     AllVoted -> False
-                                     TimeUp t -> currentTime > t
-                                     AllVotedOrTimeUp t -> currentTime > t)
-                   $ currentVotes
-  mapM_ (endVote votes) votesToEnd
-  liftIO . threadDelay $ (1000000 * 15 :: Int) -- Sleeps for fiteen seconds
-  votePoller votes
-
-endVote :: TVar Votes -> Int -> BotM ()
-endVote v voteid = do
-  stateOfVotes <- readTVarDisc v
-  config <- getConfig
-  let particularVote = stateOfVotes M.!? voteid
-  case particularVote of
-    Nothing -> return ()
-    Just vote -> do
-      liftIO . atomically $ modifyTVar v (M.delete voteid)
-      sendMessage (announceChannel vote) $
-        "The vote on **" <>
-        purpose vote <>
-        "** has concluded. The results are:\n" <>
-        T.unlines ["**" <> getPlayerNameFromID config p <> "**: " <> (T.unwords e) | (p,e) <- M.toList (responses vote)]
+deriving instance ToJSONKey Snowflake
+deriving instance FromJSONKey Snowflake
+instance ToJSON Vote
+instance FromJSON Vote
 
 describe :: Int -> Vote -> Text
 describe playerCount vote =
@@ -92,3 +70,23 @@ printTime :: UTCTime -> Text
 printTime = T.pack .
   (formatTime defaultTimeLocale "%b %d at %R") .
   (utcToLocalTime bst)
+
+bst :: TimeZone
+bst = TimeZone { timeZoneMinutes = 60
+               , timeZoneSummerOnly = True
+               , timeZoneName = "BST" }
+
+utcFromHoursMinutesDayOffset :: (Int, Int, Integer) -> IO UTCTime
+utcFromHoursMinutesDayOffset (hours, minutes, dayOffset) = do
+  currentTime <- getCurrentTime
+  if (localTimeOfDay . utcToLocalTime bst) currentTime > TimeOfDay {todHour = hours, todMin = minutes, todSec = 0}
+    then return . localTimeToUTC bst $
+          LocalTime { localDay = addDays (1 + dayOffset) (utctDay currentTime)
+                    , localTimeOfDay = TimeOfDay { todHour = hours
+                                                 , todMin = minutes
+                                                 , todSec = 0}}
+    else return . localTimeToUTC bst $
+          LocalTime { localDay = addDays dayOffset $ utctDay currentTime
+                    , localTimeOfDay = TimeOfDay { todHour = hours
+                                                 , todMin = minutes
+                                                 , todSec = 0}}

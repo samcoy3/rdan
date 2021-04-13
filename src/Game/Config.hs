@@ -1,5 +1,6 @@
-module Config where
+module Game.Config where
 
+import Control.Monad.Reader
 import qualified Data.Map as M
 import Data.Text hiding (find)
 

@@ -15,16 +15,13 @@ import Data.Time.LocalTime
 import System.Random
 import Text.Read hiding (lift)
 
-import Vote
-import Config
-import Util
+import Game
 
 import Discord
 import Discord.Types
 import qualified Discord.Requests as R
 
 type ScoreMap = M.Map UserId Int
-type GameState = (TVar Votes, TVar ScoreMap)
 
 --- Command type ---
 
@@ -46,9 +43,9 @@ data Command =
 
 --- COMMAND ACTION ---
 
-enactCommand :: GameState -> Message -> Command -> BotM ()
+enactCommand :: Message -> Command -> BotM ()
 
-enactCommand _ m (Help s) = sendMessage (messageChannel m)
+enactCommand m (Help s) = sendMessage (messageChannel m)
   (case s of
     Nothing -> "I'm rdan, the robot delightfully aiding Nomic.\n"
                <> "To view help on a specific command, type `!help` followed by the command you want to learn about. For example: `!help scores` to learn more about the `!scores` command.\n"
@@ -82,12 +79,13 @@ enactCommand _ m (Help s) = sendMessage (messageChannel m)
                       <> "Note that a vote will end automatically once every player has voted or the time has been reached anyway; you should use this command only if you want to end the vote prior to everyone having voted."
     )
 
-enactCommand (_, s) m PrintScores = printScores s m
+enactCommand m PrintScores = printScores m
 
-enactCommand (_, s) m (AddToScore []) =
+enactCommand m (AddToScore []) =
   sendMessage (messageChannel m) "Scores updated."
-    >> printScores s m
-enactCommand g@(_, s) m (AddToScore ((target, delta) : cs)) = do
+    >> printScores m
+enactCommand m (AddToScore ((target, delta) : cs)) = do
+  scores <- scores <$> getGameState
   player <- case target of
     Left uid -> return $ Right uid
     Right name -> do
@@ -100,10 +98,10 @@ enactCommand g@(_, s) m (AddToScore ((target, delta) : cs)) = do
       sendMessage (messageChannel m) $
       "Could not find player **" <> text <> "**."
     Right uid ->
-      modifyTVarDisc s (M.update (pure . (+ delta)) uid)
-  enactCommand g m (AddToScore cs)
+      modifyScore uid delta
+  enactCommand m (AddToScore cs)
 
-enactCommand _ m (Find x) = do
+enactCommand m (Find x) = do
   result <- getRetrieveable  x
   sendMessage  (messageChannel m) $
     (case result of
@@ -111,7 +109,7 @@ enactCommand _ m (Find x) = do
        Right ruleText -> T.unlines . tail . T.lines $ ruleText
     )
 
-enactCommand  _ m (FindInline xs) = do
+enactCommand m (FindInline xs) = do
   results <- getRetrieveables xs
   sendMessage  (messageChannel m ) $
     T.unlines $
@@ -126,7 +124,7 @@ enactCommand  _ m (FindInline xs) = do
         futures <- getRetrieveables xs'
         return $ current : futures
 
-enactCommand _ m (Roll quant sides) = do
+enactCommand m (Roll quant sides) = do
   let bounds = replicate quant (1, sides) :: [(Int, Int)]
   rolls <- liftIO $ mapM randomRIO bounds
   sendMessage (messageChannel m) $
@@ -136,9 +134,9 @@ enactCommand _ m (Roll quant sides) = do
 
 -- TODO: This handles failure to establish message channels very poorly.
 -- TODO: Time handling is pretty shocking, but can probably be cleaner.
-enactCommand (v, _) m (NewVote endCon purpose') = do
-  players' <- getPlayerIDs <$> getConfig
-  currentVotes <- readTVarDisc v
+enactCommand m (NewVote endCon purpose') = do
+  playerIDs <- getPlayerIDs <$> getConfig
+  currentVotes <- votes <$> getGameState
   endCon' <- liftIO $ case endCon of
     AllVoted -> return AllVoted
     (AllVotedOrTimeUp (Left diffTime)) -> getCurrentTime
@@ -160,16 +158,16 @@ enactCommand (v, _) m (NewVote endCon purpose') = do
                             then 0
                             else maximum . M.keys $ currentVotes)
   sendMessage (messageChannel m) $ "A new vote has been started, and players have been notified. The vote ID is #" <> (T.pack . show) newid
-  modifyTVarDisc v
-    (M.insert newid (Vote { messages = M.fromList $ zip (map messageId $ rights messageHandles) players'
-                          , responses = M.fromList $ zip players' $ repeat []
+  modifyVotes
+    (M.insert newid (Vote { messages = M.fromList $ zip (map messageId $ rights messageHandles) playerIDs
+                          , responses = M.fromList $ zip playerIDs $ repeat []
                           , purpose = purpose'
                           , announceChannel = messageChannel m
                           , endCondition = endCon'}))
 
-enactCommand (v, _) m (VoteStatus voteids) = do
+enactCommand m (VoteStatus voteids) = do
   playerCount <- length <$> players <$> getConfig
-  currentVotes <- readTVarDisc v
+  currentVotes <- votes <$> getGameState
   case voteids of
     Nothing -> sendMessage (messageChannel m) $
                if M.null currentVotes
@@ -182,21 +180,21 @@ enactCommand (v, _) m (VoteStatus voteids) = do
                               then "**Vote #" <> (T.pack . show) v <> "**: " <> describe playerCount (currentVotes M.! v)
                               else "There is no vote with the vote ID #" <> (T.pack . show) v)
 
-enactCommand g@(v, _) m (EndVote (vote:vs)) = do
-  currentVotes <- readTVarDisc v
+enactCommand m (EndVote (vote:vs)) = do
+  currentVotes <- votes <$> getGameState
   if vote `elem` (M.keys currentVotes)
-    then endVote v vote
+    then endVote vote
     else sendMessage (messageChannel m) $
          "There is no vote with the vote ID #" <> (T.pack . show) vote
-  enactCommand g m (EndVote vs)
-enactCommand _ _ (EndVote []) = return ()
+  enactCommand m (EndVote vs)
+enactCommand _ (EndVote []) = return ()
 
 --- MISC ---
 
-printScores :: TVar ScoreMap -> Message -> BotM ()
-printScores s m = do
+printScores :: Message -> BotM ()
+printScores m = do
   config <- getConfig
-  currentScores <- readTVarDisc s
+  currentScores <- scores <$> getGameState
   let scoreText = "The current scores are:\n"
         `T.append` T.unlines [(getPlayerNameFromID config p) <> ": " <> (T.pack . show) score | (p,score) <- M.toList currentScores]
   sendMessage (messageChannel m) scoreText

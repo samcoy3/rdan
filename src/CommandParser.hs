@@ -1,8 +1,7 @@
 module CommandParser where
 
+import Game
 import Commands
-import Vote
-import Config
 
 import Data.Char
 import Data.Text (Text, unpack, pack)
