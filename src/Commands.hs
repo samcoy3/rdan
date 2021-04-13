@@ -15,11 +15,7 @@ import Data.Time.LocalTime
 import System.Random
 import Text.Read hiding (lift)
 
-import Vote
-import Config
-import Util
-import Types
-import GameState
+import Game
 
 import Discord
 import Discord.Types
@@ -102,7 +98,7 @@ enactCommand m (AddToScore ((target, delta) : cs)) = do
       sendMessage (messageChannel m) $
       "Could not find player **" <> text <> "**."
     Right uid ->
-      modifyTVarDisc scores (M.update (pure . (+ delta)) uid)
+      modifyScore uid delta
   enactCommand m (AddToScore cs)
 
 enactCommand m (Find x) = do
@@ -139,8 +135,8 @@ enactCommand m (Roll quant sides) = do
 -- TODO: This handles failure to establish message channels very poorly.
 -- TODO: Time handling is pretty shocking, but can probably be cleaner.
 enactCommand m (NewVote endCon purpose') = do
-  players' <- getPlayerIDs <$> getConfig
-  currentVotes <- readTVarDisc v
+  playerIDs <- getPlayerIDs <$> getConfig
+  currentVotes <- votes <$> getGameState
   endCon' <- liftIO $ case endCon of
     AllVoted -> return AllVoted
     (AllVotedOrTimeUp (Left diffTime)) -> getCurrentTime
@@ -162,16 +158,16 @@ enactCommand m (NewVote endCon purpose') = do
                             then 0
                             else maximum . M.keys $ currentVotes)
   sendMessage (messageChannel m) $ "A new vote has been started, and players have been notified. The vote ID is #" <> (T.pack . show) newid
-  modifyTVarDisc v
-    (M.insert newid (Vote { messages = M.fromList $ zip (map messageId $ rights messageHandles) players'
-                          , responses = M.fromList $ zip players' $ repeat []
+  modifyVotes
+    (M.insert newid (Vote { messages = M.fromList $ zip (map messageId $ rights messageHandles) playerIDs
+                          , responses = M.fromList $ zip playerIDs $ repeat []
                           , purpose = purpose'
                           , announceChannel = messageChannel m
                           , endCondition = endCon'}))
 
 enactCommand m (VoteStatus voteids) = do
   playerCount <- length <$> players <$> getConfig
-  currentVotes <- readTVarDisc v
+  currentVotes <- votes <$> getGameState
   case voteids of
     Nothing -> sendMessage (messageChannel m) $
                if M.null currentVotes
@@ -185,21 +181,20 @@ enactCommand m (VoteStatus voteids) = do
                               else "There is no vote with the vote ID #" <> (T.pack . show) v)
 
 enactCommand m (EndVote (vote:vs)) = do
-  currentVotes <- readTVarDisc v
+  currentVotes <- votes <$> getGameState
   if vote `elem` (M.keys currentVotes)
-    then endVote v vote
+    then endVote vote
     else sendMessage (messageChannel m) $
          "There is no vote with the vote ID #" <> (T.pack . show) vote
-  enactCommand g m (EndVote vs)
+  enactCommand m (EndVote vs)
 enactCommand _ (EndVote []) = return ()
 
 --- MISC ---
 
 printScores :: Message -> BotM ()
 printScores m = do
-  s <- scores <$> getGameState
   config <- getConfig
-  currentScores <- readTVarDisc s
+  currentScores <- scores <$> getGameState
   let scoreText = "The current scores are:\n"
         `T.append` T.unlines [(getPlayerNameFromID config p) <> ": " <> (T.pack . show) score | (p,score) <- M.toList currentScores]
   sendMessage (messageChannel m) scoreText

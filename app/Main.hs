@@ -2,12 +2,9 @@
 
 module Main where
 
-import Config
-import Vote
+import Game
 import Commands
 import CommandParser
-import Util
-import Types
 
 import Data.List
 import qualified Data.Text as T
@@ -41,7 +38,7 @@ main = do
         TIO.putStrLn (T.pack . show $ config)
         userReadableError <- runDiscord $ def
                         { discordToken = botToken config
-                        , discordOnEvent = \event -> runReaderT (handleEvent gameState event) config
+                        , discordOnEvent = \event -> runReaderT (handleEvent event) config
                         , discordOnStart = (do
                             discordHandle <- ask
                             liftIO . forkIO $ runReaderT (runReaderT (votePoller currentVotes) config) discordHandle
