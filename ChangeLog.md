@@ -4,6 +4,7 @@
 ### Changed
 - Updated stackage snapshot to a more modern one.
 - Configuration is now done via a YAML file, rather than a .hs file.
+- The state of the game is now read from a YAML file on startup and automatically saves during play.
 - !addscore now does not require you to tag the target player. Instead, you can type their name, as registered in the game.
 
 ## [0.3.1] - 2020-06-06
