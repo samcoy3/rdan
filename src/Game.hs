@@ -27,6 +27,7 @@ module Game
 
     GameState (..),
     BotM,
+    newGameState
   )
 where
 import Game.Config
@@ -86,10 +87,10 @@ modifyVotes f = do
   serialiseGameState
 
 -------- Vote Polling --------
-votePoller :: TVar Votes -> BotM ()
-votePoller votes = do
+votePoller :: BotM ()
+votePoller = do
   currentTime <- liftIO getCurrentTime
-  currentVotes <- readTVarDisc votes
+  currentVotes <- votes <$> getGameState
   let votesToEnd = M.keys .
                    M.filter (\v -> case endCondition v of
                                      AllVoted -> False
@@ -98,7 +99,7 @@ votePoller votes = do
                    $ currentVotes
   mapM_ (endVote) votesToEnd
   liftIO . threadDelay $ (1000000 * 15 :: Int) -- Sleeps for fiteen seconds
-  votePoller votes
+  votePoller
 
 endVote :: Int -> BotM ()
 endVote voteid = do

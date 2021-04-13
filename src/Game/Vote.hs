@@ -16,12 +16,18 @@ import Data.Time.Clock
 import Data.Time.Calendar
 import Data.Time.Format
 import Data.Time.LocalTime
+import Data.Aeson.Types
+import Data.Yaml
+import GHC.Generics
 
 data EndCondition a =
   AllVoted
   | AllVotedOrTimeUp a
   | TimeUp a
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
+
+instance (ToJSON a) => ToJSON (EndCondition a)
+instance (FromJSON a) => FromJSON (EndCondition a)
 
 type VoteId = Int
 type Votes = M.Map VoteId Vote
@@ -30,7 +36,12 @@ data Vote = Vote { messages :: M.Map MessageId UserId
                  , purpose :: Text
                  , announceChannel :: ChannelId
                  , endCondition :: EndCondition UTCTime}
-            deriving (Show)
+            deriving (Show, Generic)
+
+deriving instance ToJSONKey Snowflake
+deriving instance FromJSONKey Snowflake
+instance ToJSON Vote
+instance FromJSON Vote
 
 describe :: Int -> Vote -> Text
 describe playerCount vote =
