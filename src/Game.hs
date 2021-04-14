@@ -20,7 +20,8 @@ module Game
     Vote (..),
     VoteId,
     EndCondition (..),
-    describe,
+    publicDescription,
+    userDMDescription,
     endConditionDescription,
     printTime,
     utcFromHoursMinutesDayOffset,
@@ -70,6 +71,9 @@ getConfig = asks fst
 
 getGameState :: BotM GameState
 getGameState = asks snd >>= readTVarDisc
+
+getVoteIDs :: Maybe [VoteId] -> BotM [VoteId]
+getVoteIDs = undefined
 
 serialiseGameState :: BotM ()
 serialiseGameState = getGameState >>= liftIO . encodeFile "game_state.yaml"

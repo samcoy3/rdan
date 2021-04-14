@@ -43,8 +43,8 @@ deriving instance FromJSONKey Snowflake
 instance ToJSON Vote
 instance FromJSON Vote
 
-describe :: Int -> Vote -> Text
-describe playerCount vote =
+publicDescription :: Int -> Vote -> Text
+publicDescription playerCount vote =
   "On the subject of **" <>
   purpose vote <>
   "**. So far, out of the " <>
@@ -53,6 +53,14 @@ describe playerCount vote =
   (T.pack . show . M.size . M.filter (/= []) $ responses vote) <>
   " have voted. " <>
   (endConditionDescription . endCondition) vote
+
+userDMDescription :: Text -> EndCondition UTCTime -> Text
+userDMDescription purpose endCondition =
+  "A new vote has begun on the subject of **"
+    <> purpose
+    <> "**! "
+    <> endConditionDescription endCondition
+    <> " Please react to this message with a tick or a cross in order to vote:"
 
 endConditionDescription :: EndCondition UTCTime -> Text
 endConditionDescription AllVoted =

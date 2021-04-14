@@ -1,11 +1,26 @@
 # Changelog for rdan
 
 ## Unreleased changes
+### Added
+- New syntax for vote-related activities.
+  - !newvote -> !vote new
+  - !votestatus -> !vote status
+  - !endvote -> !vote end
+- New vote actions.
+  - "!vote edit subject [target] [text]" will edit the subject of a vote.
+  - "!vote edit time [target] [time]" will re-set the time of a vote.
+
 ### Changed
 - Updated stackage snapshot to a more modern one.
 - Configuration is now done via a YAML file, rather than a .hs file.
 - The state of the game is now read from a YAML file on startup and automatically saves during play.
 - !addscore now does not require you to tag the target player. Instead, you can type their name, as registered in the game.
+
+### Deprecated
+- Deprecated the !newvote, !endvote, and !votestatus commands.
+
+### Removed
+- Removed the verbose syntax for starting a new vote.
 
 ## [0.3.1] - 2020-06-06
 ### Added

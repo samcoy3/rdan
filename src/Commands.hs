@@ -29,6 +29,15 @@ data AbsoluteTime = AbsTime { hours :: Int
                             , minutes :: Int
                             , dayOffset :: Integer } deriving (Show, Eq)
 data Retrievable = Rule Int | Motion Int deriving (Show, Eq)
+
+type Time = Either NominalDiffTime AbsoluteTime
+data VoteAction =
+  NewVote (EndCondition Time) Text
+  | EditVoteTime (Maybe [VoteId]) (EndCondition Time)
+  | EditVoteSubject (Maybe [VoteId]) Text
+  | VoteStatus (Maybe [VoteId])
+  | EndVote (Maybe [VoteId])
+  deriving (Show, Eq)
 data Command =
   Help (Maybe Text)
   | PrintScores
@@ -36,15 +45,14 @@ data Command =
   | Find Retrievable
   | FindInline [Retrievable]
   | Roll Int Int
-  | NewVote (EndCondition (Either NominalDiffTime AbsoluteTime)) Text
-  | VoteStatus (Maybe [VoteId])
-  | EndVote [VoteId]
+  | VoteCommand VoteAction
   deriving (Show, Eq)
 
 --- COMMAND ACTION ---
 
 enactCommand :: Message -> Command -> BotM ()
 
+-------- HELP --------
 enactCommand m (Help s) = sendMessage (messageChannel m)
   (case s of
     Nothing -> "I'm rdan, the robot delightfully aiding Nomic.\n"
@@ -79,6 +87,7 @@ enactCommand m (Help s) = sendMessage (messageChannel m)
                       <> "Note that a vote will end automatically once every player has voted or the time has been reached anyway; you should use this command only if you want to end the vote prior to everyone having voted."
     )
 
+-------- SCORES --------
 enactCommand m PrintScores = printScores m
 
 enactCommand m (AddToScore cs) = do
@@ -100,6 +109,7 @@ enactCommand m (AddToScore cs) = do
   sendMessage (messageChannel m) "Scores updated."
   printScores m
 
+-------- FINDING --------
 enactCommand m (Find x) = do
   result <- getRetrieveable x
   sendMessage  (messageChannel m) $
@@ -117,6 +127,7 @@ enactCommand m (FindInline xs) = do
             Right ruleText -> ruleText
         ) results
 
+-------- ROLLING --------
 enactCommand m (Roll quant sides) = do
   rolls <- replicateM quant . liftIO $ randomRIO (1, sides)
   sendMessage (messageChannel m) $
@@ -124,8 +135,9 @@ enactCommand m (Roll quant sides) = do
     " ⟵ " <>
     (T.pack . show $ rolls)
 
+-------- VOTING --------
 -- TODO: This handles failure to establish message channels very poorly.
-enactCommand m (NewVote endCon purpose') = do
+enactCommand m (VoteCommand (NewVote endCon purpose')) = do
   playerIDs <- getPlayerIDs <$> getConfig
   currentVotes <- votes <$> getGameState
   let fixTime t = case t of
@@ -137,12 +149,7 @@ enactCommand m (NewVote endCon purpose') = do
   userHandles <- getConfig >>= getDMs . getPlayerIDs
   messageHandles <- mapM ((\c -> lift . restCall
                             $ R.CreateMessage c
-                            $ "A new vote has begun on the subject of **"
-                            <> purpose'
-                            <> "**! "
-                            <> endConditionDescription endCon'
-                            <> " Please react to this message with a tick or a cross in order to vote:")
-                           . channelId) userHandles
+                            $ userDMDescription purpose' endCon') . channelId) userHandles
 
   let newid = (+1) $ max 0 (if null (M.keys currentVotes)
                             then 0
@@ -156,7 +163,11 @@ enactCommand m (NewVote endCon purpose') = do
                           , announceChannel = messageChannel m
                           , endCondition = endCon'}))
 
-enactCommand m (VoteStatus voteids) = do
+enactCommand m (VoteCommand (EditVoteTime voteids endCon)) = undefined
+
+enactCommand m (VoteCommand (EditVoteSubject voteids newSubject)) = undefined
+
+enactCommand m (VoteCommand (VoteStatus voteids)) = do
   playerCount <- length . players <$> getConfig
   currentVotes <- votes <$> getGameState
   case voteids of
@@ -164,22 +175,25 @@ enactCommand m (VoteStatus voteids) = do
                if M.null currentVotes
                then "There are no votes ongoing."
                else "The current active votes are as follows:\n" <>
-                    (T.unlines ["**Vote #" <> (T.pack . show) vid <> "**: " <> describe playerCount vote | (vid, vote) <- M.toList currentVotes])
+                    (T.unlines ["**Vote #" <> (T.pack . show) vid <> "**: " <> publicDescription playerCount vote | (vid, vote) <- M.toList currentVotes])
     Just voteids -> sendMessage (messageChannel m) $
                     T.unlines $ (flip map voteids)
                     (\v -> if v `elem` (M.keys currentVotes)
-                              then "**Vote #" <> (T.pack . show) v <> "**: " <> describe playerCount (currentVotes M.! v)
+                              then "**Vote #" <> (T.pack . show) v <> "**: " <> publicDescription playerCount (currentVotes M.! v)
                               else "There is no vote with the vote ID #" <> (T.pack . show) v)
 
-enactCommand m (EndVote vs) = forM_ vs $ \vote -> do
-  currentVotes <- votes <$> getGameState
-  if vote `elem` M.keys currentVotes
-    then endVote vote
-    else sendMessage (messageChannel m) $
-         "There is no vote with the vote ID #" <> (T.pack . show) vote
+enactCommand m (VoteCommand (EndVote vs')) = do
+  vs <- case vs' of
+    Nothing -> votes <$> getGameState >>= return . M.keys
+    Just votes -> return votes
+  forM_ vs $ \vote -> do
+    currentVotes <- votes <$> getGameState
+    if vote `elem` M.keys currentVotes
+      then endVote vote
+      else sendMessage (messageChannel m) $
+          "There is no vote with the vote ID #" <> (T.pack . show) vote
 
 --- MISC ---
-
 printScores :: Message -> BotM ()
 printScores m = do
   config <- getConfig
