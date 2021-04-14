@@ -50,10 +50,10 @@ addToScoreParser = do
     skipSpace
     target <- eitherP
       parseUserId
-      (pack <$> manyTill anyChar (skipSpace >> signed decimal))
+      (pack . unwords <$> sepBy1 (many1 letter) space)
     skipSpace
     delta <- signed decimal
-    return $ (target, delta)
+    return (target, delta)
   return $ AddToScore changes
 
 findParser :: Parser Command

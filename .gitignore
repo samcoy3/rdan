@@ -4,3 +4,5 @@ rdan.cabal
 .stack-work/
 *~
 config_backup.yaml
+config_plain.yaml
+game_state.yaml
