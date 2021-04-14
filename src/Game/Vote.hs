@@ -24,7 +24,7 @@ data EndCondition a =
   AllVoted
   | AllVotedOrTimeUp a
   | TimeUp a
-  deriving (Eq, Show, Generic)
+  deriving (Eq, Show, Functor, Foldable, Traversable, Generic)
 
 instance (ToJSON a) => ToJSON (EndCondition a)
 instance (FromJSON a) => FromJSON (EndCondition a)

@@ -81,28 +81,27 @@ enactCommand m (Help s) = sendMessage (messageChannel m)
 
 enactCommand m PrintScores = printScores m
 
-enactCommand m (AddToScore []) =
+enactCommand m (AddToScore cs) = do
+  forM_ cs $ \(target, delta) -> do
+    scores <- scores <$> getGameState
+    player <- case target of
+      Left uid -> return $ Right uid
+      Right name -> do
+        config <- getConfig
+        case getPlayerIDFromName config name of
+          Nothing -> return $ Left name
+          Just uid -> return $ Right uid
+    case player of
+      Left text ->
+        sendMessage (messageChannel m) $
+        "Could not find player **" <> text <> "**."
+      Right uid ->
+        modifyScore uid delta
   sendMessage (messageChannel m) "Scores updated."
-    >> printScores m
-enactCommand m (AddToScore ((target, delta) : cs)) = do
-  scores <- scores <$> getGameState
-  player <- case target of
-    Left uid -> return $ Right uid
-    Right name -> do
-      config <- getConfig
-      case getPlayerIDFromName config name of
-        Nothing -> return $ Left name
-        Just uid -> return $ Right uid
-  case player of
-    Left text ->
-      sendMessage (messageChannel m) $
-      "Could not find player **" <> text <> "**."
-    Right uid ->
-      modifyScore uid delta
-  enactCommand m (AddToScore cs)
+  printScores m
 
 enactCommand m (Find x) = do
-  result <- getRetrieveable  x
+  result <- getRetrieveable x
   sendMessage  (messageChannel m) $
     (case result of
        Left retr -> (T.pack . show $ retr) <> " not found, sorry!"
@@ -110,53 +109,45 @@ enactCommand m (Find x) = do
     )
 
 enactCommand m (FindInline xs) = do
-  results <- getRetrieveables xs
+  results <- forM xs $ getRetrieveable
   sendMessage  (messageChannel m ) $
     T.unlines $
     map (\r -> case r of
             Left retr -> "Could not find " <> (T.pack . show $ retr) <> "."
             Right ruleText -> ruleText
         ) results
-    where
-      getRetrieveables [] = return []
-      getRetrieveables (x:xs') = do
-        current <- getRetrieveable x
-        futures <- getRetrieveables xs'
-        return $ current : futures
 
 enactCommand m (Roll quant sides) = do
-  let bounds = replicate quant (1, sides) :: [(Int, Int)]
-  rolls <- liftIO $ mapM randomRIO bounds
+  rolls <- replicateM quant . liftIO $ randomRIO (1, sides)
   sendMessage (messageChannel m) $
     (T.pack . show . sum $ rolls) <>
     " ⟵ " <>
     (T.pack . show $ rolls)
 
 -- TODO: This handles failure to establish message channels very poorly.
--- TODO: Time handling is pretty shocking, but can probably be cleaner.
 enactCommand m (NewVote endCon purpose') = do
   playerIDs <- getPlayerIDs <$> getConfig
   currentVotes <- votes <$> getGameState
-  endCon' <- liftIO $ case endCon of
-    AllVoted -> return AllVoted
-    (AllVotedOrTimeUp (Left diffTime)) -> getCurrentTime
-      >>= return . AllVotedOrTimeUp . (addUTCTime diffTime)
-    (TimeUp (Left diffTime)) -> getCurrentTime
-      >>= return . TimeUp . (addUTCTime diffTime)
-    (AllVotedOrTimeUp (Right abs)) -> utcFromHoursMinutesDayOffset
-      (hours abs, minutes abs, dayOffset abs)
-      >>= return . AllVotedOrTimeUp
-    (TimeUp (Right abs)) -> utcFromHoursMinutesDayOffset
-      (hours abs, minutes abs, dayOffset abs)
-      >>= return . TimeUp
+  let fixTime t = case t of
+        Left diffTime -> getCurrentTime >>= (return . addUTCTime diffTime)
+        Right absTime -> utcFromHoursMinutesDayOffset
+          (hours absTime, minutes absTime, dayOffset absTime)
+  endCon' <- liftIO $ traverse fixTime endCon
 
-  userHandles <- getPlayerIDs <$> getConfig >>= getDMs
+  userHandles <- getConfig >>= getDMs . getPlayerIDs
   messageHandles <- mapM ((\c -> lift . restCall
                             $ R.CreateMessage c
-                            $ "A new vote has begun on the subject of **" <> purpose' <> "**! " <> endConditionDescription endCon' <> " Please react to this message with a tick or a cross in order to vote:") . channelId) userHandles
-  let newid = (+1) $ max 0 (if (M.keys currentVotes) == []
+                            $ "A new vote has begun on the subject of **"
+                            <> purpose'
+                            <> "**! "
+                            <> endConditionDescription endCon'
+                            <> " Please react to this message with a tick or a cross in order to vote:")
+                           . channelId) userHandles
+
+  let newid = (+1) $ max 0 (if null (M.keys currentVotes)
                             then 0
                             else maximum . M.keys $ currentVotes)
+
   sendMessage (messageChannel m) $ "A new vote has been started, and players have been notified. The vote ID is #" <> (T.pack . show) newid
   modifyVotes
     (M.insert newid (Vote { messages = M.fromList $ zip (map messageId $ rights messageHandles) playerIDs
@@ -166,7 +157,7 @@ enactCommand m (NewVote endCon purpose') = do
                           , endCondition = endCon'}))
 
 enactCommand m (VoteStatus voteids) = do
-  playerCount <- length <$> players <$> getConfig
+  playerCount <- length . players <$> getConfig
   currentVotes <- votes <$> getGameState
   case voteids of
     Nothing -> sendMessage (messageChannel m) $
@@ -180,14 +171,12 @@ enactCommand m (VoteStatus voteids) = do
                               then "**Vote #" <> (T.pack . show) v <> "**: " <> describe playerCount (currentVotes M.! v)
                               else "There is no vote with the vote ID #" <> (T.pack . show) v)
 
-enactCommand m (EndVote (vote:vs)) = do
+enactCommand m (EndVote vs) = forM_ vs $ \vote -> do
   currentVotes <- votes <$> getGameState
-  if vote `elem` (M.keys currentVotes)
+  if vote `elem` M.keys currentVotes
     then endVote vote
     else sendMessage (messageChannel m) $
          "There is no vote with the vote ID #" <> (T.pack . show) vote
-  enactCommand m (EndVote vs)
-enactCommand _ (EndVote []) = return ()
 
 --- MISC ---
 
@@ -216,10 +205,4 @@ getRetrieveable retr =
       else Right (head validRules)
 
 getDMs :: [UserId] -> BotM [Channel]
-getDMs [] = return []
-getDMs (u:us) = do
-  channel <- lift . restCall $ R.CreateDM u
-  restChannels <- getDMs us
-  case channel of
-    Left _ -> return restChannels
-    Right c -> return $ c : restChannels
+getDMs users = traverse (lift . restCall . R.CreateDM) users >>= return . rights

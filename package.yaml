@@ -39,6 +39,8 @@ library:
     - RecordWildCards
     - MultiWayIf
     - LambdaCase
+    - DeriveFunctor
+    - DeriveTraversable
     - DeriveGeneric
     - GeneralisedNewtypeDeriving
     - StandaloneDeriving
