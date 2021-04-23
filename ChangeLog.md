@@ -2,13 +2,16 @@
 
 ## Unreleased changes
 ### Added
-- New syntax for vote-related activities.
+- New syntax for vote-related activities:
   - !newvote -> !vote new
-  - !votestatus -> !vote status
-  - !endvote -> !vote end
-- New vote actions.
-  - "!vote edit subject [target] [text]" will edit the subject of a vote.
-  - "!vote edit time [target] [time]" will re-set the time of a vote.
+  - !votestatus -> !vote status [targets]
+  - !endvote -> !vote end [targets]
+- New vote actions:
+  - "!vote edit subject [targets] [text]" will edit the subject of a vote.
+  - "!vote edit time [targets] [time]" will re-set the time of a vote.
+- New options when specifying the target of a !vote command:
+  - A comma-separated list of vote IDs, e.g. "#1, #9,#3".
+  - The word "all": applies the command to all currently running votes.
 
 ### Changed
 - Updated stackage snapshot to a more modern one.
