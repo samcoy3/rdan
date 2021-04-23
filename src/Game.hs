@@ -1,5 +1,6 @@
 module Game
   ( sendMessage,
+    editMessage,
     readTVarDisc,
     modifyTVarDisc,
     getConfig,
@@ -56,8 +57,12 @@ type BotM = ReaderT (Config, TVar GameState) DiscordHandler
 
 -------- Utilities --------
 sendMessage :: ChannelId -> Text -> BotM ()
-sendMessage channel m = do
+sendMessage channel m =
   lift . void . restCall $ R.CreateMessage channel m
+
+editMessage :: ChannelId -> MessageId -> Text -> BotM ()
+editMessage channel message newtext =
+  lift . void . restCall $ R.EditMessage (channel, message) newtext Nothing
 
 readTVarDisc :: TVar a -> BotM a
 readTVarDisc = liftIO . readTVarIO
@@ -71,9 +76,6 @@ getConfig = asks fst
 
 getGameState :: BotM GameState
 getGameState = asks snd >>= readTVarDisc
-
-getVoteIDs :: Maybe [VoteId] -> BotM [VoteId]
-getVoteIDs = undefined
 
 serialiseGameState :: BotM ()
 serialiseGameState = getGameState >>= liftIO . encodeFile "game_state.yaml"
@@ -96,13 +98,20 @@ votePoller :: BotM ()
 votePoller = do
   currentTime <- liftIO getCurrentTime
   currentVotes <- votes <$> getGameState
+  playerCount <- length . players <$> getConfig
   let votesToEnd = M.keys .
                    M.filter (\v -> case endCondition v of
-                                     AllVoted -> False
+                                     AllVoted ->
+                                       (M.size . M.filter (/= []) $ responses v)
+                                       == playerCount
                                      TimeUp t -> currentTime > t
-                                     AllVotedOrTimeUp t -> currentTime > t)
+                                     AllVotedOrTimeUp t ->
+                                       currentTime > t
+                                       ||
+                                       (M.size . M.filter (/= []) $ responses v)
+                                       == playerCount)
                    $ currentVotes
-  mapM_ (endVote) votesToEnd
+  mapM_ endVote votesToEnd
   liftIO . threadDelay $ (1000000 * 15 :: Int) -- Sleeps for fiteen seconds
   votePoller
 
@@ -119,4 +128,4 @@ endVote voteid = do
         "The vote on **" <>
         purpose vote <>
         "** has concluded. The results are:\n" <>
-        T.unlines ["**" <> getPlayerNameFromID config p <> "**: " <> (T.unwords e) | (p,e) <- M.toList (responses vote)]
+        T.unlines ["**" <> getPlayerNameFromID config p <> "**: " <> T.unwords e | (p,e) <- M.toList (responses vote)]

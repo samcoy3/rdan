@@ -7,6 +7,7 @@ import Control.Monad (join)
 import Data.Char
 import Data.Functor (($>))
 import Data.Text (Text, unpack, pack)
+import Data.List.NonEmpty (fromList)
 import Control.Applicative
 
 import Data.Time.Clock
@@ -94,7 +95,7 @@ voteEditTimeParser :: Parser Command
 voteEditTimeParser = do
   string "!vote edit time"
   skipSpace
-  voteIds <- parseVoteIds
+  voteIds <- parseTargetVotes
   skipSpace
   endCondition <- parseEndCondition
   return . VoteCommand $ EditVoteTime voteIds endCondition
@@ -103,7 +104,7 @@ voteEditSubjectParser :: Parser Command
 voteEditSubjectParser = do
   string "!vote edit subject"
   skipSpace
-  voteIds <- parseVoteIds
+  voteIds <- parseTargetVotes
   skipSpace
   votePurpose <- takeText
   return . VoteCommand $ EditVoteSubject voteIds votePurpose
@@ -111,12 +112,18 @@ voteEditSubjectParser = do
 voteStatusParser :: Parser Command
 voteStatusParser = do
   string "!votestatus" <|> string "!vote status"
-  fmap (VoteCommand . VoteStatus) $ join <$> optional parseVoteIds
+  skipSpace
+  (VoteCommand . VoteStatus)
+    <$> ( optional parseTargetVotes >>= \case
+            Nothing -> return AllVotes
+            Just voteTargets -> return voteTargets
+        )
 
 endVoteParser :: Parser Command
 endVoteParser = do
   string "!endvote" <|> string "!vote end"
-  fmap (VoteCommand . EndVote) $ parseVoteIds
+  skipSpace
+  fmap (VoteCommand . EndVote) parseTargetVotes
 
 --- Generic Parsers --
 
@@ -143,10 +150,10 @@ findOneInlineParser = do
 parseVoteId :: Parser VoteId
 parseVoteId = char '#' >> decimal
 
-parseVoteIds :: Parser (Maybe [VoteId])
-parseVoteIds =
-  (string "all" $> Nothing)
-  <|> Just <$> sepBy1 parseVoteId (char ',' >> skipSpace)
+parseTargetVotes :: Parser VoteTargets
+parseTargetVotes =
+  (string "all" $> AllVotes)
+  <|> VoteList . fromList <$> sepBy1 parseVoteId (char ',' >> skipSpace)
 
 parseDiffTime :: Parser NominalDiffTime
 parseDiffTime = do
@@ -178,9 +185,9 @@ parseTime = eitherP parseDiffTime parseTimeOfDay
 
 parseEndCondition :: Parser (EndCondition Time)
 parseEndCondition = do
-  canEndEarlyWithVotes <- peekChar >>= return . \case
-    Just '!' -> False
-    Nothing -> True
+  canEndEarlyWithVotes <- peekChar >>= \case
+    Just '!' -> char '!' $> False
+    _ -> return True
   timeConstraint <- optional parseTime
   if canEndEarlyWithVotes
     then case timeConstraint of

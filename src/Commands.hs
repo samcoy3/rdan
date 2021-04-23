@@ -2,6 +2,8 @@ module Commands where
 
 import Data.Either
 import Data.Maybe
+import qualified Data.List.NonEmpty as NE
+import Data.List.NonEmpty (NonEmpty)
 import qualified Data.Text as T
 import Data.Text (Text)
 import qualified Data.Map as M
@@ -31,12 +33,31 @@ data AbsoluteTime = AbsTime { hours :: Int
 data Retrievable = Rule Int | Motion Int deriving (Show, Eq)
 
 type Time = Either NominalDiffTime AbsoluteTime
+fixTime :: Time -> BotM UTCTime
+fixTime t = liftIO $ case t of
+  Left diffTime -> getCurrentTime >>= (return . addUTCTime diffTime)
+  Right absTime -> utcFromHoursMinutesDayOffset
+    (hours absTime, minutes absTime, dayOffset absTime)
+
+data VoteTargets = AllVotes | VoteList (NonEmpty VoteId) deriving (Show, Eq)
+
+getTargetVotes :: VoteTargets -> BotM [VoteId]
+getTargetVotes vs = case vs of
+  AllVotes -> votes <$> getGameState >>= return . M.keys
+  VoteList votes -> return . NE.toList $ votes
+
+handleNoVotes :: [VoteId] -> Message -> BotM () -> BotM ()
+handleNoVotes vs m action =
+  if null vs
+    then sendMessage (messageChannel m) "There are no ongoing votes!"
+    else action
+
 data VoteAction =
   NewVote (EndCondition Time) Text
-  | EditVoteTime (Maybe [VoteId]) (EndCondition Time)
-  | EditVoteSubject (Maybe [VoteId]) Text
-  | VoteStatus (Maybe [VoteId])
-  | EndVote (Maybe [VoteId])
+  | EditVoteTime VoteTargets (EndCondition Time)
+  | EditVoteSubject VoteTargets Text
+  | VoteStatus VoteTargets
+  | EndVote VoteTargets
   deriving (Show, Eq)
 data Command =
   Help (Maybe Text)
@@ -140,12 +161,7 @@ enactCommand m (Roll quant sides) = do
 enactCommand m (VoteCommand (NewVote endCon purpose')) = do
   playerIDs <- getPlayerIDs <$> getConfig
   currentVotes <- votes <$> getGameState
-  let fixTime t = case t of
-        Left diffTime -> getCurrentTime >>= (return . addUTCTime diffTime)
-        Right absTime -> utcFromHoursMinutesDayOffset
-          (hours absTime, minutes absTime, dayOffset absTime)
-  endCon' <- liftIO $ traverse fixTime endCon
-
+  endCon' <- traverse fixTime endCon
   userHandles <- getConfig >>= getDMs . getPlayerIDs
   messageHandles <- mapM ((\c -> lift . restCall
                             $ R.CreateMessage c
@@ -163,29 +179,60 @@ enactCommand m (VoteCommand (NewVote endCon purpose')) = do
                           , announceChannel = messageChannel m
                           , endCondition = endCon'}))
 
-enactCommand m (VoteCommand (EditVoteTime voteids endCon)) = undefined
+enactCommand m (VoteCommand (EditVoteTime voteids endCon)) = do
+  vs <- getTargetVotes voteids
+  handleNoVotes vs m $ do
+    endCon' <- traverse fixTime endCon
+    voteMap <- votes <$> getGameState
+    forM_ vs $ \v -> do
+      if v `notElem` M.keys voteMap
+        then sendMessage (messageChannel m)
+            $ "Could not find vote #" <> (T.pack . show $ v) <> "!"
+        else forM_ (M.toList . messages $ voteMap M.! v) $ \(message, user) -> do
+        channel' <- lift . restCall . R.CreateDM $ user
+        case channel' of
+          Left _ -> return ()
+          Right channel -> editMessage (channelId channel) message
+            $ userDMDescription (purpose $ voteMap M.! v) endCon'
+      modifyVotes (flip M.adjust v
+                    (\vote -> vote {endCondition = endCon'}))
+    sendMessage (messageChannel m) "End conditions for votes updated."
 
-enactCommand m (VoteCommand (EditVoteSubject voteids newSubject)) = undefined
+enactCommand m (VoteCommand (EditVoteSubject voteids newSubject)) = do
+  vs <- getTargetVotes voteids
+  handleNoVotes vs m $ do
+    voteMap <- votes <$> getGameState
+    forM_ vs $ \v -> do
+      if v `notElem` M.keys voteMap
+        then sendMessage (messageChannel m)
+            $ "Could not find vote #" <> (T.pack . show $ v) <> "!"
+        else forM_ (M.toList . messages $ voteMap M.! v) $ \(message, user) -> do
+        channel' <- lift . restCall . R.CreateDM $ user
+        case channel' of
+          Left _ -> return ()
+          Right channel -> editMessage (channelId channel) message
+            $ userDMDescription (newSubject) (endCondition $ voteMap M.! v)
+      modifyVotes (flip M.adjust v
+                    (\vote -> vote {purpose = newSubject}))
+    sendMessage (messageChannel m) "Subject for votes updated."
 
 enactCommand m (VoteCommand (VoteStatus voteids)) = do
   playerCount <- length . players <$> getConfig
   currentVotes <- votes <$> getGameState
-  case voteids of
-    Nothing -> sendMessage (messageChannel m) $
-               if M.null currentVotes
-               then "There are no votes ongoing."
-               else "The current active votes are as follows:\n" <>
-                    (T.unlines ["**Vote #" <> (T.pack . show) vid <> "**: " <> publicDescription playerCount vote | (vid, vote) <- M.toList currentVotes])
-    Just voteids -> sendMessage (messageChannel m) $
-                    T.unlines $ (flip map voteids)
-                    (\v -> if v `elem` (M.keys currentVotes)
-                              then "**Vote #" <> (T.pack . show) v <> "**: " <> publicDescription playerCount (currentVotes M.! v)
-                              else "There is no vote with the vote ID #" <> (T.pack . show) v)
+  vs <- getTargetVotes voteids
+  handleNoVotes vs m $ do
+    case voteids of
+      AllVotes -> sendMessage (messageChannel m) $
+                  "The current active votes are as follows:\n" <>
+                  (T.unlines ["**Vote #" <> (T.pack . show) vid <> "**: " <> publicDescription playerCount vote | (vid, vote) <- M.toList currentVotes])
+      VoteList (voteids) -> sendMessage (messageChannel m) $
+                      T.unlines $ (flip map $ NE.toList voteids)
+                      (\v -> if v `elem` (M.keys currentVotes)
+                                then "**Vote #" <> (T.pack . show) v <> "**: " <> publicDescription playerCount (currentVotes M.! v)
+                                else "There is no vote with the vote ID #" <> (T.pack . show) v)
 
 enactCommand m (VoteCommand (EndVote vs')) = do
-  vs <- case vs' of
-    Nothing -> votes <$> getGameState >>= return . M.keys
-    Just votes -> return votes
+  vs <- getTargetVotes vs'
   forM_ vs $ \vote -> do
     currentVotes <- votes <$> getGameState
     if vote `elem` M.keys currentVotes
