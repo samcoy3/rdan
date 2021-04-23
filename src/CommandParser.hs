@@ -3,8 +3,11 @@ module CommandParser where
 import Game
 import Commands
 
+import Control.Monad (join)
 import Data.Char
+import Data.Functor (($>))
 import Data.Text (Text, unpack, pack)
+import Data.List.NonEmpty (fromList)
 import Control.Applicative
 
 import Data.Time.Clock
@@ -19,8 +22,9 @@ commandParser = helpParser
                 <|> addToScoreParser
                 <|> findParser
                 <|> rollParser
-                <|> newVoteLongParser
                 <|> newVoteParser
+                <|> voteEditTimeParser
+                <|> voteEditSubjectParser
                 <|> voteStatusParser
                 <|> endVoteParser
                 <|> findInlineParser
@@ -78,65 +82,48 @@ rollParser = do
   sidedness <- decimal
   return $ Roll quantity sidedness
 
-newVoteLongParser :: Parser Command
-newVoteLongParser = do
-  string "!newvote"
-  skipSpace
-  endCondition <- choice [ string "after"
-                           >> skipSpace
-                           >> parseDiffTime
-                           >>= return . TimeUp . Left
-
-                           , string "at"
-                           >> skipSpace
-                           >> parseTimeOfDay
-                           >>= return . TimeUp . Right
-
-                           , string "all votes or after"
-                           >> skipSpace
-                           >> parseDiffTime
-                           >>= return . AllVotedOrTimeUp . Left
-
-                           , string "all votes or at"
-                           >> skipSpace
-                           >> parseTimeOfDay
-                           >>= return . AllVotedOrTimeUp . Right
-
-                           , string "all votes"
-                           >> return AllVoted ]
-  skipSpace
-  purpose <- takeText
-  return $ NewVote endCondition purpose
-
 newVoteParser :: Parser Command
 newVoteParser = do
-  string "!newvote"
+  string "!newvote" <|> string "!vote new"
   skipSpace
-  canEndEarlyWithVotes <- option True $ char '!' >> return False
-  timeConstraint <- option Nothing $
-    Just <$> choice [ Left <$> parseDiffTime
-                    , Right <$> parseTimeOfDay ]
+  endCondition <- parseEndCondition
   skipSpace
   votePurpose <- takeText
-  endCondition <- if canEndEarlyWithVotes
-                  then case timeConstraint of
-                         Nothing -> return AllVoted
-                         Just x -> return $ AllVotedOrTimeUp x
-                  else case timeConstraint of
-                         Nothing -> fail "This vote would not end."
-                         Just x -> return $ TimeUp x
-  return $ NewVote endCondition votePurpose
+  return . VoteCommand $ NewVote endCondition votePurpose
+
+voteEditTimeParser :: Parser Command
+voteEditTimeParser = do
+  string "!vote edit time"
+  skipSpace
+  voteIds <- parseTargetVotes
+  skipSpace
+  endCondition <- parseEndCondition
+  return . VoteCommand $ EditVoteTime voteIds endCondition
+
+voteEditSubjectParser :: Parser Command
+voteEditSubjectParser = do
+  string "!vote edit subject"
+  skipSpace
+  voteIds <- parseTargetVotes
+  skipSpace
+  votePurpose <- takeText
+  return . VoteCommand $ EditVoteSubject voteIds votePurpose
 
 voteStatusParser :: Parser Command
 voteStatusParser = do
-  string "!votestatus"
-  fmap VoteStatus $ option Nothing $
-    Just <$> many1 (skipSpace >> parseVoteId)
+  string "!votestatus" <|> string "!vote status"
+  skipSpace
+  (VoteCommand . VoteStatus)
+    <$> ( optional parseTargetVotes >>= \case
+            Nothing -> return AllVotes
+            Just voteTargets -> return voteTargets
+        )
 
 endVoteParser :: Parser Command
 endVoteParser = do
-  string "!endvote"
-  fmap EndVote $ many1 (skipSpace >> parseVoteId)
+  string "!endvote" <|> string "!vote end"
+  skipSpace
+  fmap (VoteCommand . EndVote) parseTargetVotes
 
 --- Generic Parsers --
 
@@ -163,6 +150,11 @@ findOneInlineParser = do
 parseVoteId :: Parser VoteId
 parseVoteId = char '#' >> decimal
 
+parseTargetVotes :: Parser VoteTargets
+parseTargetVotes =
+  (string "all" $> AllVotes)
+  <|> VoteList . fromList <$> sepBy1 parseVoteId (char ',' >> skipSpace)
+
 parseDiffTime :: Parser NominalDiffTime
 parseDiffTime = do
   days <- fromIntegral <$> option 0 (parseQuant 'd')
@@ -187,3 +179,20 @@ parseTimeOfDay = do
   if hours >= 0 && hours < 24 && minutes >= 0 && minutes < 60
     then return AbsTime { hours = hours, minutes = minutes, dayOffset = dayOffset }
     else fail "Invalid time"
+
+parseTime :: Parser Time
+parseTime = eitherP parseDiffTime parseTimeOfDay
+
+parseEndCondition :: Parser (EndCondition Time)
+parseEndCondition = do
+  canEndEarlyWithVotes <- peekChar >>= \case
+    Just '!' -> char '!' $> False
+    _ -> return True
+  timeConstraint <- optional parseTime
+  if canEndEarlyWithVotes
+    then case timeConstraint of
+      Nothing -> return AllVoted
+      Just x -> return $ AllVotedOrTimeUp x
+    else case timeConstraint of
+      Nothing -> fail "This vote would not end."
+      Just x -> return $ TimeUp x
