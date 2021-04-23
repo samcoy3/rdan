@@ -31,11 +31,23 @@ instance FromJSON ArticleType
 instance ToJSON Article
 instance FromJSON Article
 
-prettyPrint :: ArticleType -> Int -> Text -> Text
-prettyPrint atype number text =
+printArticleName :: ArticleType -> Int -> Text
+printArticleName atype number =
+  (T.pack . show) atype <> " " <> (T.pack . show) number
+
+prettyPrintFromText :: ArticleType -> Int -> Text -> Text
+prettyPrintFromText atype number text =
   "**"
-  <> (T.pack . show) atype
-  <> " "
-  <> (T.pack . show) number
+  <> printArticleName atype number
   <> ":**\n"
   <> text
+
+prettyPrintFromArticle :: ArticleType -> Int -> Article -> Text
+prettyPrintFromArticle atype number article =
+  repealChars
+  <> "**"
+  <> printArticleName atype number
+  <> ":**\n"
+  <> body article
+  <> repealChars
+  where repealChars = if repealed article then "~~" else ""

@@ -20,7 +20,6 @@ commandParser :: Parser Command
 commandParser = helpParser
                 <|> printScoresParser
                 <|> addToScoreParser
-                -- <|> findParser
                 <|> rollParser
                 -- Votes
                 <|> newVoteParser
@@ -70,19 +69,6 @@ addToScoreParser = do
     delta <- signed decimal
     return (target, delta)
   return . AddToScore . fromList $ changes
-
--- findParser :: Parser Command
--- findParser = do
---   command <- (string "!rule" >> return Rule)
---              <|> (string "!motion" >> return Motion)
---   skipSpace
---   index <- decimal
---   return $ Find (command index)
-
--- findInlineParser :: Parser Command
--- findInlineParser = do
---   retrievables <- many1 findOneInlineParser
---   return $ FindInline retrievables
 
 rollParser :: Parser Command
 rollParser = do
@@ -222,9 +208,6 @@ parseUserId = do
   uid <- read <$> many digit
   char '>'
   return uid
-
--- findOneInlineParser :: Parser Retrievable
--- findOneInlineParser = do
 
 parseVoteId :: Parser VoteId
 parseVoteId = char '#' >> decimal

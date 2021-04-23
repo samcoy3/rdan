@@ -6,6 +6,7 @@ module Game
     serialiseGameState,
     modifyScore,
     modifyVotes,
+    modifyArticles,
     votePoller,
     endVote,
 
@@ -27,6 +28,10 @@ module Game
 
     Article(..),
     ArticleType (..),
+    prettyPrintFromText,
+    prettyPrintFromArticle,
+    printArticleName,
+    getArticleChannel,
 
     GameState (..),
     BotM,
@@ -100,6 +105,11 @@ modifyArticles f = do
   gameState <- asks snd
   modifyTVarDisc gameState (\g -> g {articles = f (articles g)})
   serialiseGameState
+
+-------- Articles --------
+getArticleChannel :: ArticleType -> BotM ChannelId
+getArticleChannel Motion = motionsChannel <$> getConfig
+getArticleChannel Rule = rulesChannel <$> getConfig
 
 -------- Vote Polling --------
 votePoller :: BotM ()

@@ -71,8 +71,6 @@ data Command =
   Help (Maybe Text)
   | PrintScores
   | AddToScore (NonEmpty (Either UserId Text, Int))
-  -- | Find Retrievable
-  -- | FindInline (NonEmpty Retrievable)
   | Roll Int Int
   | VoteCommand VoteAction
   | ArticleCommand ArticleAction
@@ -267,6 +265,56 @@ enactCommand m BadCommand =
   void . lift . restCall
     $ R.CreateReaction (messageChannel m, messageId m) "question"
 
+--- ARTICLES ---
+enactCommand m (ArticleCommand (NewArticle atype number abody)) = do
+  channel <- getArticleChannel atype
+  currentArticles <- articles <$> getGameState
+  let highestNumber =
+        fromMaybe 0
+        . fmap (snd . fst)
+        . M.lookupMax
+        . M.filterWithKey (\(t, n) v -> t == atype)
+        $ currentArticles
+  let number' = fromMaybe (highestNumber + 1) number
+  let existingArticle = currentArticles M.!? (atype, number')
+  if isJust existingArticle
+    then sendMessage (messageChannel m)
+         $ "Cannot post " <> (T.toLower . T.pack . show) atype <> ": one already exists with the same type and number"
+    else do
+    amessage <- lift . restCall
+      $ R.CreateMessage channel (prettyPrintFromText atype number' abody)
+    case amessage of
+      Left _ -> liftIO $ putStrLn "Error sending rule"
+      Right amessage' ->
+        modifyArticles
+          (M.insert (atype, number')
+          Article {
+              body = abody,
+              message = (messageId amessage'),
+              repealed = False})
+
+enactCommand m (ArticleCommand (FetchArticle atype number)) = fetchArticle (messageChannel m) (atype, number)
+
+enactCommand m (ArticleCommand (FetchArticleInline fetches)) = forM_ fetches $ \(atype, number) ->
+  fetchArticle (messageChannel m) (atype, number)
+
+enactCommand m (ArticleCommand (EditArticle atype number newbody)) = do
+  articleChannel <- getArticleChannel atype
+  currentArticles <- articles <$> getGameState
+  let existingArticle = currentArticles M.!? (atype, number)
+  case existingArticle of
+    Nothing -> sendMessage (messageChannel m)
+      $ "Couldn't find " <> printArticleName atype number <> "!"
+    Just article -> do
+      let newarticle = article {body = newbody}
+      editMessage articleChannel (message article) (prettyPrintFromArticle atype number newarticle)
+      modifyArticles
+        (M.adjust (const newarticle) (atype, number))
+
+enactCommand m (ArticleCommand (RepealArticle atype number)) = undefined
+
+enactCommand m (ArticleCommand (DeleteArticle atype number)) = undefined
+
 --- MISC ---
 printScores :: Message -> BotM ()
 printScores m = do
@@ -275,6 +323,14 @@ printScores m = do
   let scoreText = "The current scores are:\n"
         `T.append` T.unlines [(getPlayerNameFromID config p) <> ": " <> (T.pack . show) score | (p,score) <- M.toList currentScores]
   sendMessage (messageChannel m) scoreText
+
+fetchArticle :: ChannelId -> (ArticleType, Int) -> BotM ()
+fetchArticle channel query@(atype, number) = do
+  article <- (M.!? query) . articles <$> getGameState
+  sendMessage channel $
+    case article of
+      Nothing -> "Could not find " <> printArticleName atype number <> "!"
+      Just article -> prettyPrintFromArticle atype number article
 
 -- getRetrieveable :: Retrievable -> BotM (Either Retrievable Text)
 -- getRetrieveable retr =
