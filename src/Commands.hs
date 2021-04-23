@@ -284,14 +284,16 @@ enactCommand m (ArticleCommand (NewArticle atype number abody)) = do
     amessage <- lift . restCall
       $ R.CreateMessage channel (prettyPrintFromText atype number' abody)
     case amessage of
-      Left _ -> liftIO $ putStrLn "Error sending rule"
-      Right amessage' ->
+      Left e -> liftIO $ putStrLn $ show e
+      Right amessage' -> do
         modifyArticles
           (M.insert (atype, number')
           Article {
               body = abody,
               message = (messageId amessage'),
               repealed = False})
+        sendMessage (messageChannel m)
+          $ (printArticleName atype number') <> " posted!"
 
 enactCommand m (ArticleCommand (FetchArticle atype number)) = fetchArticle (messageChannel m) (atype, number)
 
@@ -310,6 +312,8 @@ enactCommand m (ArticleCommand (EditArticle atype number newbody)) = do
       editMessage articleChannel (message article) (prettyPrintFromArticle atype number newarticle)
       modifyArticles
         (M.adjust (const newarticle) (atype, number))
+      sendMessage (messageChannel m)
+        $ (printArticleName atype number) <> " updated!"
 
 enactCommand m (ArticleCommand (RepealArticle atype number)) = undefined
 

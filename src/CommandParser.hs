@@ -125,7 +125,7 @@ endVoteParser = do
 newArticleParser :: Parser Command
 newArticleParser = do
   atype <- parseArticleType <* string " new"
-  skipSpace
+  skipWhile isHorizontalSpace
   number <- optional decimal
   endOfLine
   abody <- takeText
