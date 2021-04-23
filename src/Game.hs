@@ -99,6 +99,7 @@ votePoller = do
   currentTime <- liftIO getCurrentTime
   currentVotes <- votes <$> getGameState
   playerCount <- length . players <$> getConfig
+  pollFrequency <- votePollFrequency <$> getConfig
   let votesToEnd = M.keys .
                    M.filter (\v -> case endCondition v of
                                      AllVoted ->
@@ -112,7 +113,7 @@ votePoller = do
                                        == playerCount)
                    $ currentVotes
   mapM_ endVote votesToEnd
-  liftIO . threadDelay $ (1000000 * 15 :: Int) -- Sleeps for fiteen seconds
+  liftIO . threadDelay $ (1000000 * pollFrequency :: Int) -- Sleeps for fiteen seconds
   votePoller
 
 endVote :: Int -> BotM ()

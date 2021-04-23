@@ -1,6 +1,19 @@
+# The bot token which you obtained from the Discord developer site. Never share this.
 # bot-token:
+
+# The channel IDs in which the rules and motions, respectively, are posted.
 # rules-channel:
 # motions-channel:
+
+# The frequency with which rdan should check for finished votes, in seconds.
+# Usually about 10-15 seconds is fine.
+# rdan will immediately end a vote if all players vote, as long as the vote may end when all players vote.
+# vote-poll-frequency:
+
+# The players who will be playing the game.
+# For each player, a human-readable name, and their Discord user ID should be provided.
 # players:
+#   - name:
+#     id:
 #   - name:
 #     id:

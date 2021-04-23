@@ -22,6 +22,7 @@ data Config = Config
   { botToken :: Text,
     rulesChannel :: ChannelId,
     motionsChannel :: ChannelId,
+    votePollFrequency :: Int,
     players :: [Player]
   }
   deriving (Eq, Show)
@@ -44,6 +45,7 @@ instance FromJSON Config where
     c .: "bot-token" <*>
     (convert <$> c .: "rules-channel") <*>
     (convert <$> c .: "motions-channel") <*>
+    c .: "vote-poll-frequency" <*>
     c .: "players"
   parseJSON _ = fail "Failed to parse config"
 
