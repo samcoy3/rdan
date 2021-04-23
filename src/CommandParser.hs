@@ -28,6 +28,7 @@ commandParser = helpParser
                 <|> voteStatusParser
                 <|> endVoteParser
                 <|> findInlineParser
+                <|> badCommandParser
 
 helpParser :: Parser Command
 helpParser = do
@@ -40,9 +41,11 @@ helpParser = do
                                  , "rule"
                                  , "motion"
                                  , "roll"
-                                 , "newvote"
-                                 , "votestatus"
-                                 , "endvote"])
+                                 , "vote new"
+                                 , "vote edit subject"
+                                 , "vote edit time"
+                                 , "vote end"
+                                 , "vote status"])
 
 printScoresParser :: Parser Command
 printScoresParser = oneWordParser "!scores" PrintScores
@@ -124,6 +127,24 @@ endVoteParser = do
   string "!endvote" <|> string "!vote end"
   skipSpace
   fmap (VoteCommand . EndVote) parseTargetVotes
+
+badCommandParser = do
+  foldr1 (<|>) $
+    (string . ("!" <>)) <$> [ "help"
+                            , "scores"
+                            , "addscore"
+                            , "rule"
+                            , "motion"
+                            , "roll"
+                            , "newvote"
+                            , "votestatus"
+                            , "endvote"
+                            , "vote new"
+                            , "vote status"
+                            , "vote edit"
+                            , "vote end"
+                            ]
+  return BadCommand
 
 --- Generic Parsers --
 

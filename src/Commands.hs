@@ -67,6 +67,7 @@ data Command =
   | FindInline [Retrievable]
   | Roll Int Int
   | VoteCommand VoteAction
+  | BadCommand
   deriving (Show, Eq)
 
 --- COMMAND ACTION ---
@@ -74,39 +75,52 @@ data Command =
 enactCommand :: Message -> Command -> BotM ()
 
 -------- HELP --------
-enactCommand m (Help s) = sendMessage (messageChannel m)
-  (case s of
-    Nothing -> "I'm rdan, the robot delightfully aiding Nomic.\n"
-               <> "To view help on a specific command, type `!help` followed by the command you want to learn about. For example: `!help scores` to learn more about the `!scores` command.\n"
-               <> "The list of commands available are as follows: `help`, `scores`, `addscore`, `rule`, `motion`, `newote`, `roll`, `votestatus`, `endvote`."
-    Just "help" -> "To view help on a specific command, type `!help` followed by the command you want to learn about. For example: `!help scores` to learn more about the `!scores` command.\n"
-               <> "The list of commands available are as follows: `help`, `scores`, `addscore`, `rule`, `motion`, `newote`, `roll`, `votestatus`, `endvote`."
-    Just "scores" -> "Usage: `!scores`\n"
-                     <> "Displays the current scores of all the players."
-    Just "addscore" -> "Usage: `!addscore <player> <delta> [<player> <delta>...]`\n"
-                       <> "Changes `<player>`'s score by `<delta>`. You must tag `<player` or type their exact name to use this command. You can specify multiple players and changes. For example: `!addscore @Alice 3 Bob -2` will increase Alice's score by 3 and decrease Bob's by 2."
-    Just "rule" -> "Usage: `!rule <rule_number>`\n"
-                   <> "Retrieves the rule numbered `<rule_number>`. You can also call this inline with `!r<rule_number>`."
-    Just "motion" -> "Usage: `!motion <motion_number>`\n"
-                     <> "Retrieves the motion numbered `<motion_number>`. You can also call this inline with `!m<motion_number>`."
-    Just "roll" -> "Usage: `!roll <x>d<y>`\n"
-                   <> "Rolls a d`<y>`dice `<x>` times and displays the results."
-    Just "newvote" -> "Usage: `!newvote <end_condition> <purpose...`\n"
-                      <> "Starts a new vote on the subject of `<purpose>`.\n"
-                      <> "`end_condition` determines how the vote ends. It is constructed as follows:\n"
-                      <> "- Firstly, if there is a `!` at the beginning of `end_condition` then the vote will not end when all votes are in.\n"
-                      <> "- Next, optional time constraints can be specified. To specify a period of time, use the syntax `XXdYYhZZm`, where `XX`, `YY`, and `ZZ` are numbers denoting how many days, minutes, and seconds the vote is to last. Parts of this can be omitted, e.g. `YYhZZm`. Alternatively, you can specify the precise time the vote is to end using `HH:MM+D` syntax, where `HH` is the hours (in the 24 hour clock), `MM` is the minutes, and `DD` is the offset in days from the next instance of that time.\n"
-                      <> "\nExamples:\n "
-                      <> "- `!newvote Apples` will start a new vote on the subject of Apples. The vote will only end when everyone has voted.\n"
-                      <> "- `!newvote 24h Derek` will start a new vote on the subject of Derek. The vote lasts 24 hours, but can end early (if everyone votes before then).\n"
-                      <> "- `!newvote !18:00+1 Snakes` will start a new vote on the subject of Snakes. The vote will end at the 18:00 after next (if this vote was proposed on Tuesday at 1700, this would be Wednesday at 1800; if this vote was proposed on Tuesday at 1900, this would be Thursday at 1900). The vote may not end early, even if everyone has voted."
-    Just "votestatus" -> "Usage: `!votestatus [#XX #YY...`\n"
-                         <> "Queries the status of the ongoing votes. Will show how many people have voted, and display the subject of the vote.\n"
-                         <> "You can optionally supply one or several vote IDs in order to restrict your query to those votes, e.g. `!votestatus #23`."
-    Just "endvote" -> "Usage: `!endvote #XX #YY ...`\n"
-                      <> "Prematurely ends the vote(s) with the specified ID(s).\n"
-                      <> "Note that a vote will end automatically once every player has voted or the time has been reached anyway; you should use this command only if you want to end the vote prior to everyone having voted."
-    )
+enactCommand m (Help s) = do
+  let voteTargetHelp = "You can specify the target of a vote command in several ways. `#1` will target the vote with the ID 1, if such a vote exists. `#1,#2` will similarly target both votes 1 and 2. Finally, `all` will target all currently running votes.\n"
+  let voteEndConditionHelp = "The \"end condition\" of a vote is constructed as follows:\n"
+                        <> "- Firstly, if there is a `!` at the beginning of the end condition then the vote will not end prematurely when all votes are in.\n"
+                        <> "- Next, optional time constraints can be specified. To specify a period of time, use the syntax `XXdYYhZZm`, where `XX`, `YY`, and `ZZ` are numbers denoting how many days, minutes, and seconds the vote is to last. Parts of this can be omitted, e.g. `YYhZZm`. Alternatively, you can specify the precise time the vote is to end using `HH:MM+D` syntax, where `HH` is the hours (in the 24 hour clock), `MM` is the minutes, and `DD` is the offset in days from the next instance of that time.\n"
+
+  sendMessage (messageChannel m)
+    (case s of
+      Nothing -> "I'm rdan, the robot delightfully aiding Nomic.\n"
+        <> "To view help on a specific command, type `!help` followed by the command you want to learn about. For example: `!help scores` to learn more about the `!scores` command.\n"
+        <> "The list of commands available are as follows: `help`, `scores`, `addscore`, `rule`, `motion`, `roll`, `vote new`, `vote edit time`, `vote edit subject`, `vote status`, `vote end`."
+      Just "help" -> "To view help on a specific command, type `!help` followed by the command you want to learn about. For example: `!help scores` to learn more about the `!scores` command.\n"
+        <> "The list of commands available are as follows: `help`, `scores`, `addscore`, `rule`, `motion`, `newote`, `roll`, `votestatus`, `endvote`."
+      Just "scores" -> "Usage: `!scores`\n"
+        <> "Displays the current scores of all the players."
+      Just "addscore" -> "Usage: `!addscore <player> <delta> [<player> <delta>...]`\n"
+        <> "Changes `<player>`'s score by `<delta>`. You must tag `<player` or type their exact name to use this command. You can specify multiple players and changes. For example: `!addscore @Alice 3 Bob -2` will increase Alice's score by 3 and decrease Bob's by 2."
+      Just "rule" -> "Usage: `!rule <rule_number>`\n"
+        <> "Retrieves the rule numbered `<rule_number>`. You can also call this inline with `!r<rule_number>`."
+      Just "motion" -> "Usage: `!motion <motion_number>`\n"
+        <> "Retrieves the motion numbered `<motion_number>`. You can also call this inline with `!m<motion_number>`."
+      Just "roll" -> "Usage: `!roll <x>d<y>`\n"
+        <> "Rolls a d`<y>`dice `<x>` times and displays the results."
+      Just "vote new" -> "Usage: `!vote new <end_condition> <purpose...`\n"
+        <> "Starts a new vote on the subject of `<purpose>`.\n"
+        <> voteEndConditionHelp
+        <> "\nExamples:\n "
+        <> "- `!newvote Apples` will start a new vote on the subject of Apples. The vote will only end when everyone has voted.\n"
+        <> "- `!newvote 24h Derek` will start a new vote on the subject of Derek. The vote lasts 24 hours, but can end early (if everyone votes before then).\n"
+        <> "- `!newvote !18:00+1 Snakes` will start a new vote on the subject of Snakes. The vote will end at the 18:00 after next (if this vote was proposed on Tuesday at 1700, this would be Wednesday at 1800; if this vote was proposed on Tuesday at 1900, this would be Thursday at 1900). The vote may not end early, even if everyone has voted."
+      Just "vote status" -> "Usage: `!vote status <targets>`\n"
+        <> "Queries the status of the ongoing votes. Will show how many people have voted, and display the subject of the vote.\n"
+        <> voteTargetHelp
+      Just "vote end" -> "Usage: `!vote end <targets>`\n"
+        <> "Prematurely ends the vote(s) with the specified ID(s).\n"
+        <> "Note that a vote will end automatically once every player has voted or the time has been reached anyway; you should use this command only if you want to end the vote prior to everyone having voted."
+        <> voteTargetHelp
+      Just "vote edit time" -> "Usage: `!vote edit time <targets> <end_condition>`\n"
+        <> "Edits the time constraints of the target votes.\n"
+        <> voteTargetHelp
+        <> voteEndConditionHelp
+        <> "Note that if you omit the end condition then it will edit the target votes so that they end only when all votes are received (i.e. the time constraint will be removed)."
+      Just "vote edit subject" -> "Usage: `!vote edit subject <targets> <subject>`\n"
+        <> "Edits the subject of the target votes.\n"
+        <> voteTargetHelp
+      )
 
 -------- SCORES --------
 enactCommand m PrintScores = printScores m
@@ -239,6 +253,10 @@ enactCommand m (VoteCommand (EndVote vs')) = do
       then endVote vote
       else sendMessage (messageChannel m) $
           "There is no vote with the vote ID #" <> (T.pack . show) vote
+
+enactCommand m BadCommand =
+  void . lift . restCall
+    $ R.CreateReaction (messageChannel m, messageId m) "question"
 
 --- MISC ---
 printScores :: Message -> BotM ()

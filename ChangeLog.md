@@ -12,12 +12,14 @@
 - New options when specifying the target of a !vote command:
   - A comma-separated list of vote IDs, e.g. "#1, #9,#3".
   - The word "all": applies the command to all currently running votes.
+- The bot will react with a question mark when your command is invalid.
 
 ### Changed
 - Updated stackage snapshot to a more modern one.
 - Configuration is now done via a YAML file, rather than a .hs file.
 - The state of the game is now read from a YAML file on startup and automatically saves during play.
 - !addscore now does not require you to tag the target player. Instead, you can type their name, as registered in the game.
+- Updated the help text to reflect the new syntax.
 
 ### Deprecated
 - Deprecated the !newvote, !endvote, and !votestatus commands.
