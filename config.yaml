@@ -7,6 +7,7 @@
 
 # The frequency with which rdan should check for finished votes, in seconds.
 # Usually about 10-15 seconds is fine.
+# The default if unspecified is 15 seconds.
 # rdan will immediately end a vote if all players vote, as long as the vote may end when all players vote.
 # vote-poll-frequency:
 

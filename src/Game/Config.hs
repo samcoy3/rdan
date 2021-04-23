@@ -5,7 +5,7 @@ import qualified Data.Map as M
 import Data.Text hiding (find)
 
 import qualified Data.Yaml as Y
-import Data.Yaml (FromJSON(..), (.:))
+import Data.Yaml (FromJSON(..), (.:), (.:?), (.!=))
 import Data.Yaml.Aeson (withScientific)
 
 import Data.Foldable
@@ -45,7 +45,7 @@ instance FromJSON Config where
     c .: "bot-token" <*>
     (convert <$> c .: "rules-channel") <*>
     (convert <$> c .: "motions-channel") <*>
-    c .: "vote-poll-frequency" <*>
+    c .:? "vote-poll-frequency" .!= 15 <*>
     c .: "players"
   parseJSON _ = fail "Failed to parse config"
 
