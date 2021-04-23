@@ -30,7 +30,7 @@ type ScoreMap = M.Map UserId Int
 data AbsoluteTime = AbsTime { hours :: Int
                             , minutes :: Int
                             , dayOffset :: Integer } deriving (Show, Eq)
-data Retrievable = Rule Int | Motion Int deriving (Show, Eq)
+-- data Retrievable = Rule Int | Motion Int deriving  (Show, Eq)
 
 type Time = Either NominalDiffTime AbsoluteTime
 fixTime :: Time -> BotM UTCTime
@@ -59,14 +59,23 @@ data VoteAction =
   | VoteStatus VoteTargets
   | EndVote VoteTargets
   deriving (Show, Eq)
+data ArticleAction =
+  NewArticle ArticleType (Maybe Int) Text
+  | FetchArticle ArticleType Int
+  | FetchArticleInline (NonEmpty (ArticleType, Int))
+  | EditArticle ArticleType Int Text
+  | RepealArticle ArticleType Int
+  | DeleteArticle ArticleType Int
+  deriving (Show, Eq)
 data Command =
   Help (Maybe Text)
   | PrintScores
-  | AddToScore [(Either UserId Text, Int)]
-  | Find Retrievable
-  | FindInline [Retrievable]
+  | AddToScore (NonEmpty (Either UserId Text, Int))
+  -- | Find Retrievable
+  -- | FindInline (NonEmpty Retrievable)
   | Roll Int Int
   | VoteCommand VoteAction
+  | ArticleCommand ArticleAction
   | BadCommand
   deriving (Show, Eq)
 
@@ -145,22 +154,22 @@ enactCommand m (AddToScore cs) = do
   printScores m
 
 -------- FINDING --------
-enactCommand m (Find x) = do
-  result <- getRetrieveable x
-  sendMessage  (messageChannel m) $
-    (case result of
-       Left retr -> (T.pack . show $ retr) <> " not found, sorry!"
-       Right ruleText -> T.unlines . tail . T.lines $ ruleText
-    )
+-- enactCommand m (Find x) = do
+--   result <- getRetrieveable x
+--   sendMessage  (messageChannel m) $
+--     (case result of
+--        Left retr -> (T.pack . show $ retr) <> " not found, sorry!"
+--        Right ruleText -> T.unlines . tail . T.lines $ ruleText
+--     )
 
-enactCommand m (FindInline xs) = do
-  results <- forM xs $ getRetrieveable
-  sendMessage  (messageChannel m ) $
-    T.unlines $
-    map (\r -> case r of
-            Left retr -> "Could not find " <> (T.pack . show $ retr) <> "."
-            Right ruleText -> ruleText
-        ) results
+-- enactCommand m (FindInline xs) = do
+--   results <- forM xs $ getRetrieveable
+--   sendMessage  (messageChannel m ) $
+--     T.unlines $
+--     map (\r -> case r of
+--             Left retr -> "Could not find " <> (T.pack . show $ retr) <> "."
+--             Right ruleText -> ruleText
+--         ) results
 
 -------- ROLLING --------
 enactCommand m (Roll quant sides) = do
@@ -267,21 +276,21 @@ printScores m = do
         `T.append` T.unlines [(getPlayerNameFromID config p) <> ": " <> (T.pack . show) score | (p,score) <- M.toList currentScores]
   sendMessage (messageChannel m) scoreText
 
-getRetrieveable :: Retrievable -> BotM (Either Retrievable Text)
-getRetrieveable retr =
-  do
-    channel <- case retr of
-      Rule _ -> rulesChannel <$> getConfig
-      Motion _ -> motionsChannel <$> getConfig
-    messages <- lift . restCall $
-                R.GetChannelMessages channel (100, R.LatestMessages)
-    let validRules = filter
-                     (\t -> T.pack ("**" ++ show retr ++ "**") `T.isPrefixOf` t)
-                     (map messageText $ fromRight [] messages)
-    return $
-      if null validRules
-      then Left retr
-      else Right (head validRules)
+-- getRetrieveable :: Retrievable -> BotM (Either Retrievable Text)
+-- getRetrieveable retr =
+--   do
+--     channel <- case retr of
+--       Rule _ -> rulesChannel <$> getConfig
+--       Motion _ -> motionsChannel <$> getConfig
+--     messages <- lift . restCall $
+--                 R.GetChannelMessages channel (100, R.LatestMessages)
+--     let validRules = filter
+--                      (\t -> T.pack ("**" ++ show retr ++ "**") `T.isPrefixOf` t)
+--                      (map messageText $ fromRight [] messages)
+--     return $
+--       if null validRules
+--       then Left retr
+--       else Right (head validRules)
 
 getDMs :: [UserId] -> BotM [Channel]
 getDMs users = traverse (lift . restCall . R.CreateDM) users >>= return . rights

@@ -20,14 +20,22 @@ commandParser :: Parser Command
 commandParser = helpParser
                 <|> printScoresParser
                 <|> addToScoreParser
-                <|> findParser
+                -- <|> findParser
                 <|> rollParser
+                -- Votes
                 <|> newVoteParser
                 <|> voteEditTimeParser
                 <|> voteEditSubjectParser
                 <|> voteStatusParser
                 <|> endVoteParser
-                <|> findInlineParser
+                -- Articles
+                <|> newArticleParser
+                <|> fetchArticleParser
+                <|> editArticleParser
+                <|> repealArticleParser
+                <|> deleteArticleParser
+                -- These two ought to be last
+                <|> fetchArticleInlineParser
                 <|> badCommandParser
 
 helpParser :: Parser Command
@@ -61,20 +69,20 @@ addToScoreParser = do
     skipSpace
     delta <- signed decimal
     return (target, delta)
-  return $ AddToScore changes
+  return . AddToScore . fromList $ changes
 
-findParser :: Parser Command
-findParser = do
-  command <- (string "!rule" >> return Rule)
-             <|> (string "!motion" >> return Motion)
-  skipSpace
-  index <- decimal
-  return $ Find (command index)
+-- findParser :: Parser Command
+-- findParser = do
+--   command <- (string "!rule" >> return Rule)
+--              <|> (string "!motion" >> return Motion)
+--   skipSpace
+--   index <- decimal
+--   return $ Find (command index)
 
-findInlineParser :: Parser Command
-findInlineParser = do
-  retrievables <- many1 findOneInlineParser
-  return $ FindInline retrievables
+-- findInlineParser :: Parser Command
+-- findInlineParser = do
+--   retrievables <- many1 findOneInlineParser
+--   return $ FindInline retrievables
 
 rollParser :: Parser Command
 rollParser = do
@@ -128,6 +136,63 @@ endVoteParser = do
   skipSpace
   fmap (VoteCommand . EndVote) parseTargetVotes
 
+newArticleParser :: Parser Command
+newArticleParser = do
+  atype <- parseArticleType <* string " new"
+  skipSpace
+  number <- optional decimal
+  endOfLine
+  abody <- takeText
+  return . ArticleCommand
+    $ NewArticle atype number abody
+
+fetchArticleParser :: Parser Command
+fetchArticleParser = do
+  atype <- parseArticleType
+  skipSpace
+  number <- decimal
+  return . ArticleCommand
+    $ FetchArticle atype number
+
+editArticleParser :: Parser Command
+editArticleParser = do
+  atype <- parseArticleType <* string " edit"
+  skipSpace
+  number <- decimal
+  endOfLine
+  abody <- takeText
+  return . ArticleCommand
+    $ EditArticle atype number abody
+
+repealArticleParser :: Parser Command
+repealArticleParser = do
+  atype <- parseArticleType <* string " repeal"
+  skipSpace
+  number <- decimal
+  return . ArticleCommand
+    $ RepealArticle atype number
+
+deleteArticleParser :: Parser Command
+deleteArticleParser = do
+  atype <- parseArticleType <* string " delete"
+  skipSpace
+  number <- decimal
+  return . ArticleCommand
+    $ DeleteArticle atype number
+
+fetchArticleInlineParser :: Parser Command
+fetchArticleInlineParser = do
+  let parseInlineArticle =
+        (string "!r" >> decimal >>= (\n -> return (Rule, n))) <|>
+        (string "!m" >> decimal >>= (\n -> return (Motion, n)))
+  let fetchOneInlineArticle = do
+        skipWhile (/= '!')
+        parseInlineArticle
+          <|> (A.take 1 >> fetchOneInlineArticle)
+  articles <- many1 fetchOneInlineArticle
+  return . ArticleCommand
+    $ FetchArticleInline (fromList articles)
+
 badCommandParser = do
   foldr1 (<|>) $
     (string . ("!" <>)) <$> [ "help"
@@ -158,15 +223,8 @@ parseUserId = do
   char '>'
   return uid
 
-findOneInlineParser :: Parser Retrievable
-findOneInlineParser = do
-  skipWhile (/= '!')
-  nextRetrievable <- choice [ parseInlineRetrievable
-                            , A.take 1 >> findOneInlineParser]
-  return nextRetrievable
-    where parseInlineRetrievable =
-            (string "!r" >> decimal >>= (\n -> return $ Rule n)) <|>
-            (string "!m" >> decimal >>= (\n -> return $ Motion n))
+-- findOneInlineParser :: Parser Retrievable
+-- findOneInlineParser = do
 
 parseVoteId :: Parser VoteId
 parseVoteId = char '#' >> decimal
@@ -217,3 +275,8 @@ parseEndCondition = do
     else case timeConstraint of
       Nothing -> fail "This vote would not end."
       Just x -> return $ TimeUp x
+
+parseArticleType :: Parser ArticleType
+parseArticleType = do
+  string "!motion" $> Motion
+  <|> string "!rule" $> Rule

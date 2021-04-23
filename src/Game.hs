@@ -1,8 +1,6 @@
 module Game
   ( sendMessage,
     editMessage,
-    readTVarDisc,
-    modifyTVarDisc,
     getConfig,
     getGameState,
     serialiseGameState,
@@ -27,11 +25,15 @@ module Game
     printTime,
     utcFromHoursMinutesDayOffset,
 
+    Article(..),
+    ArticleType (..),
+
     GameState (..),
     BotM,
     newGameState
   )
 where
+import Game.Article
 import Game.Config
 import Game.GameState
 import Game.Vote
@@ -91,6 +93,12 @@ modifyVotes :: (Map VoteId Vote -> Map VoteId Vote) -> BotM ()
 modifyVotes f = do
   gameState <- asks snd
   modifyTVarDisc gameState (\g -> g {votes = f (votes g)})
+  serialiseGameState
+
+modifyArticles :: (Articles -> Articles) -> BotM ()
+modifyArticles f = do
+  gameState <- asks snd
+  modifyTVarDisc gameState (\g -> g {articles = f (articles g)})
   serialiseGameState
 
 -------- Vote Polling --------
