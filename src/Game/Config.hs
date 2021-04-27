@@ -36,15 +36,15 @@ instance FromJSON Player where
   parseJSON (Y.Object c) =
     Player <$>
     c .: "name" <*>
-    (convert <$> c .: "id")
+    c .: "id"
   parseJSON _ = fail "Failed to parse player"
 
 instance FromJSON Config where
   parseJSON (Y.Object c) =
     Config <$>
     c .: "bot-token" <*>
-    (convert <$> c .: "rules-channel") <*>
-    (convert <$> c .: "motions-channel") <*>
+    c .: "rules-channel" <*>
+    c .: "motions-channel" <*>
     c .:? "vote-poll-frequency" .!= 15 <*>
     c .: "players"
   parseJSON _ = fail "Failed to parse config"

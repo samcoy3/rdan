@@ -2,6 +2,7 @@ module Game.GameState where
 
 import Game.Config
 import Game.Vote
+import Game.Article
 
 import qualified Data.Map as M
 import Data.Map (Map)
@@ -13,7 +14,8 @@ import Discord.Types
 
 data GameState = GameState
   { scores :: Map UserId Int,
-    votes :: Map VoteId Vote
+    votes :: Map VoteId Vote,
+    articles :: Articles
   } deriving (Show, Generic)
 
 instance ToJSON GameState
@@ -23,4 +25,5 @@ newGameState :: Config -> GameState
 newGameState config =
   GameState
     (M.fromList $ zip (getPlayerIDs config) (repeat 0))
+    M.empty
     M.empty

@@ -30,7 +30,7 @@ type ScoreMap = M.Map UserId Int
 data AbsoluteTime = AbsTime { hours :: Int
                             , minutes :: Int
                             , dayOffset :: Integer } deriving (Show, Eq)
-data Retrievable = Rule Int | Motion Int deriving (Show, Eq)
+-- data Retrievable = Rule Int | Motion Int deriving  (Show, Eq)
 
 type Time = Either NominalDiffTime AbsoluteTime
 fixTime :: Time -> BotM UTCTime
@@ -59,14 +59,21 @@ data VoteAction =
   | VoteStatus VoteTargets
   | EndVote VoteTargets
   deriving (Show, Eq)
+data ArticleAction =
+  NewArticle ArticleType (Maybe Int) Text
+  | FetchArticle ArticleType Int
+  | FetchArticleInline (NonEmpty (ArticleType, Int))
+  | EditArticle ArticleType Int Text
+  | RepealArticle ArticleType Int
+  | DeleteArticle ArticleType Int
+  deriving (Show, Eq)
 data Command =
   Help (Maybe Text)
   | PrintScores
-  | AddToScore [(Either UserId Text, Int)]
-  | Find Retrievable
-  | FindInline [Retrievable]
+  | AddToScore (NonEmpty (Either UserId Text, Int))
   | Roll Int Int
   | VoteCommand VoteAction
+  | ArticleCommand ArticleAction
   | BadCommand
   deriving (Show, Eq)
 
@@ -78,8 +85,27 @@ enactCommand :: Message -> Command -> BotM ()
 enactCommand m (Help s) = do
   let voteTargetHelp = "You can specify the target of a vote command in several ways. `#1` will target the vote with the ID 1, if such a vote exists. `#1,#2` will similarly target both votes 1 and 2. Finally, `all` will target all currently running votes.\n"
   let voteEndConditionHelp = "The \"end condition\" of a vote is constructed as follows:\n"
-                        <> "- Firstly, if there is a `!` at the beginning of the end condition then the vote will not end prematurely when all votes are in.\n"
-                        <> "- Next, optional time constraints can be specified. To specify a period of time, use the syntax `XXdYYhZZm`, where `XX`, `YY`, and `ZZ` are numbers denoting how many days, minutes, and seconds the vote is to last. Parts of this can be omitted, e.g. `YYhZZm`. Alternatively, you can specify the precise time the vote is to end using `HH:MM+D` syntax, where `HH` is the hours (in the 24 hour clock), `MM` is the minutes, and `DD` is the offset in days from the next instance of that time.\n"
+        <> "- Firstly, if there is a `!` at the beginning of the end condition then the vote will not end prematurely when all votes are in.\n"
+        <> "- Next, optional time constraints can be specified. To specify a period of time, use the syntax `XXdYYhZZm`, where `XX`, `YY`, and `ZZ` are numbers denoting how many days, minutes, and seconds the vote is to last. Parts of this can be omitted, e.g. `YYhZZm`. Alternatively, you can specify the precise time the vote is to end using `HH:MM+D` syntax, where `HH` is the hours (in the 24 hour clock), `MM` is the minutes, and `DD` is the offset in days from the next instance of that time.\n"
+  let articleGeneral = "Usage: `!rule/motion <n>`. Retrieves rule <n> or motion <n> respectively. Can also be called inline with `!r<n>`/`!m<n>`.\n"
+        <> "There are several other commands that start with `!rule` or `!motion`:\n"
+        <> "- `!rule/motion new`\n"
+        <> "- `!rule/motion edit`\n"
+        <> "- `!rule/motion repeal`\n"
+        <> "- `!rule/motion delete`\n"
+        <> "Type `!help` before any of these commands to learn more about them (e.g. `!help motion new`)."
+  let articleNew = "Usage: `!rule/motion new [number]\\n<rule_or_motion_text>`.\n"
+        <> "Posts a new rule or motion to the respective channel.\n"
+        <> "You can optionally specify the number that the rule or motion should have. Alternatively, you can omit it, and the number above the current highest is selected.\n"
+        <> "After the optional number, add a newline and then put the body of the rule or motion that you wish to post."
+  let articleEdit = "Usage: `!rule/motion edit <number>\\n<rule_or_motion_text>`.\n"
+        <> "Edits the specified rule or motion.\n"
+        <> "After the number of the rule or motion, add a newline and then put the body of the rule or motion that you wish to post."
+  let articleRepeal = "Usage: `!rule/motion repeal <number>`.\n"
+        <> "Repeals the specified rule or motion. The rule or motion will be displayed struck-through.\n"
+        <> "If used on a rule or motion which is already repealed, this command will un-repeal it."
+  let articleDelete = "Usage: `!rule/motion delete <number>`\n"
+        <> "Deletes the specified rule or motion. This removes it from the bot's internal state and deletes the message in the channel. This command is not reversible."
 
   sendMessage (messageChannel m)
     (case s of
@@ -92,12 +118,25 @@ enactCommand m (Help s) = do
         <> "Displays the current scores of all the players."
       Just "addscore" -> "Usage: `!addscore <player> <delta> [<player> <delta>...]`\n"
         <> "Changes `<player>`'s score by `<delta>`. You must tag `<player` or type their exact name to use this command. You can specify multiple players and changes. For example: `!addscore @Alice 3 Bob -2` will increase Alice's score by 3 and decrease Bob's by 2."
-      Just "rule" -> "Usage: `!rule <rule_number>`\n"
-        <> "Retrieves the rule numbered `<rule_number>`. You can also call this inline with `!r<rule_number>`."
-      Just "motion" -> "Usage: `!motion <motion_number>`\n"
-        <> "Retrieves the motion numbered `<motion_number>`. You can also call this inline with `!m<motion_number>`."
+      Just "rule" -> articleGeneral
+      Just "motion" -> articleGeneral
+      Just "rule new" -> articleNew
+      Just "motion new" -> articleNew
+      Just "rule edit" -> articleEdit
+      Just "motion edit" -> articleEdit
+      Just "rule repeal" -> articleRepeal
+      Just "motion repeal" -> articleRepeal
+      Just "rule delete" -> articleDelete
+      Just "motion delete" -> articleDelete
       Just "roll" -> "Usage: `!roll <x>d<y>`\n"
         <> "Rolls a d`<y>`dice `<x>` times and displays the results."
+      Just "vote" -> "There are several commands that start with `!vote`:\n"
+        <> "- `!vote new`\n"
+        <> "- `!vote edit subject`\n"
+        <> "- `!vote edit time`\n"
+        <> "- `!vote end`\n"
+        <> "- `!vote status`\n"
+        <> "Type `!help` before any of these commands to learn more about them (e.g. `!help vote end`)."
       Just "vote new" -> "Usage: `!vote new <end_condition> <purpose...`\n"
         <> "Starts a new vote on the subject of `<purpose>`.\n"
         <> voteEndConditionHelp
@@ -110,7 +149,7 @@ enactCommand m (Help s) = do
         <> voteTargetHelp
       Just "vote end" -> "Usage: `!vote end <targets>`\n"
         <> "Prematurely ends the vote(s) with the specified ID(s).\n"
-        <> "Note that a vote will end automatically once every player has voted or the time has been reached anyway; you should use this command only if you want to end the vote prior to everyone having voted."
+        <> "Note that a vote will end automatically once every player has voted or the time has been reached anyway; you should use this command only if you want to end the vote prior to everyone having voted.\n"
         <> voteTargetHelp
       Just "vote edit time" -> "Usage: `!vote edit time <targets> <end_condition>`\n"
         <> "Edits the time constraints of the target votes.\n"
@@ -145,22 +184,22 @@ enactCommand m (AddToScore cs) = do
   printScores m
 
 -------- FINDING --------
-enactCommand m (Find x) = do
-  result <- getRetrieveable x
-  sendMessage  (messageChannel m) $
-    (case result of
-       Left retr -> (T.pack . show $ retr) <> " not found, sorry!"
-       Right ruleText -> T.unlines . tail . T.lines $ ruleText
-    )
+-- enactCommand m (Find x) = do
+--   result <- getRetrieveable x
+--   sendMessage  (messageChannel m) $
+--     (case result of
+--        Left retr -> (T.pack . show $ retr) <> " not found, sorry!"
+--        Right ruleText -> T.unlines . tail . T.lines $ ruleText
+--     )
 
-enactCommand m (FindInline xs) = do
-  results <- forM xs $ getRetrieveable
-  sendMessage  (messageChannel m ) $
-    T.unlines $
-    map (\r -> case r of
-            Left retr -> "Could not find " <> (T.pack . show $ retr) <> "."
-            Right ruleText -> ruleText
-        ) results
+-- enactCommand m (FindInline xs) = do
+--   results <- forM xs $ getRetrieveable
+--   sendMessage  (messageChannel m ) $
+--     T.unlines $
+--     map (\r -> case r of
+--             Left retr -> "Could not find " <> (T.pack . show $ retr) <> "."
+--             Right ruleText -> ruleText
+--         ) results
 
 -------- ROLLING --------
 enactCommand m (Roll quant sides) = do
@@ -258,6 +297,64 @@ enactCommand m BadCommand =
   void . lift . restCall
     $ R.CreateReaction (messageChannel m, messageId m) "question"
 
+--- ARTICLES ---
+enactCommand m (ArticleCommand (NewArticle atype number abody)) = do
+  channel <- getArticleChannel atype
+  currentArticles <- articles <$> getGameState
+  let highestNumber =
+        fromMaybe 0
+        . fmap (snd . fst)
+        . M.lookupMax
+        . M.filterWithKey (\(t, n) v -> t == atype)
+        $ currentArticles
+  let number' = fromMaybe (highestNumber + 1) number
+  let existingArticle = currentArticles M.!? (atype, number')
+  if isJust existingArticle
+    then sendMessage (messageChannel m)
+         $ "Cannot post " <> (T.toLower . T.pack . show) atype <> ": one already exists with the same type and number."
+    else do
+    amessage <- lift . restCall
+      $ R.CreateMessage channel (prettyPrintFromText atype number' abody)
+    case amessage of
+      Left e -> liftIO $ putStrLn $ show e
+      Right amessage' -> do
+        modifyArticles
+          (M.insert (atype, number')
+          Article {
+              body = abody,
+              message = (messageId amessage'),
+              repealed = False})
+        sendMessage (messageChannel m)
+          $ (printArticleName atype number') <> " posted!"
+
+enactCommand m (ArticleCommand (FetchArticle atype number)) = fetchArticle (messageChannel m) (atype, number)
+
+enactCommand m (ArticleCommand (FetchArticleInline fetches)) = forM_ fetches $ \(atype, number) ->
+  fetchArticle (messageChannel m) (atype, number)
+
+enactCommand m (ArticleCommand (EditArticle atype number newbody)) =
+  modifyArticle m (atype, number)
+    (\a -> a {body = newbody})
+    (printArticleName atype number <> " edited!")
+
+enactCommand m (ArticleCommand (RepealArticle atype number)) =
+  modifyArticle m (atype, number)
+    (\a -> a {repealed = not $ repealed a})
+    (printArticleName atype number <> " repealed!")
+
+enactCommand m (ArticleCommand (DeleteArticle atype number)) = do
+  articleChannel <- getArticleChannel atype
+  currentArticles <- articles <$> getGameState
+  let existingArticle = currentArticles M.!? (atype, number)
+  case existingArticle of
+    Nothing -> sendMessage (messageChannel m)
+      $ "Couldn't find " <> printArticleName atype number <> "!"
+    Just article -> do
+      void . lift . restCall $ R.DeleteMessage (articleChannel, message article)
+      modifyArticles (M.delete (atype, number))
+      sendMessage (messageChannel m)
+        $ printArticleName atype number <> " deleted!"
+
 --- MISC ---
 printScores :: Message -> BotM ()
 printScores m = do
@@ -267,21 +364,28 @@ printScores m = do
         `T.append` T.unlines [(getPlayerNameFromID config p) <> ": " <> (T.pack . show) score | (p,score) <- M.toList currentScores]
   sendMessage (messageChannel m) scoreText
 
-getRetrieveable :: Retrievable -> BotM (Either Retrievable Text)
-getRetrieveable retr =
-  do
-    channel <- case retr of
-      Rule _ -> rulesChannel <$> getConfig
-      Motion _ -> motionsChannel <$> getConfig
-    messages <- lift . restCall $
-                R.GetChannelMessages channel (100, R.LatestMessages)
-    let validRules = filter
-                     (\t -> T.pack ("**" ++ show retr ++ "**") `T.isPrefixOf` t)
-                     (map messageText $ fromRight [] messages)
-    return $
-      if null validRules
-      then Left retr
-      else Right (head validRules)
+fetchArticle :: ChannelId -> (ArticleType, Int) -> BotM ()
+fetchArticle channel query@(atype, number) = do
+  article <- (M.!? query) . articles <$> getGameState
+  sendMessage channel $
+    case article of
+      Nothing -> "Couldn't find " <> printArticleName atype number <> "!"
+      Just article -> prettyPrintFromArticle atype number article
+
+modifyArticle :: Message -> (ArticleType, Int) -> (Article -> Article) -> Text -> BotM ()
+modifyArticle m (atype, number) mod onSuccess = do
+  articleChannel <- getArticleChannel atype
+  currentArticles <- articles <$> getGameState
+  let existingArticle = currentArticles M.!? (atype, number)
+  case existingArticle of
+    Nothing -> sendMessage (messageChannel m)
+      $ "Couldn't find " <> printArticleName atype number <> "!"
+    Just article -> do
+      let newarticle = mod article
+      editMessage articleChannel (message newarticle) (prettyPrintFromArticle atype number newarticle)
+      modifyArticles
+        (M.adjust (const newarticle) (atype, number))
+      sendMessage (messageChannel m) onSuccess
 
 getDMs :: [UserId] -> BotM [Channel]
 getDMs users = traverse (lift . restCall . R.CreateDM) users >>= return . rights
