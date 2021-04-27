@@ -85,8 +85,19 @@ enactCommand :: Message -> Command -> BotM ()
 enactCommand m (Help s) = do
   let voteTargetHelp = "You can specify the target of a vote command in several ways. `#1` will target the vote with the ID 1, if such a vote exists. `#1,#2` will similarly target both votes 1 and 2. Finally, `all` will target all currently running votes.\n"
   let voteEndConditionHelp = "The \"end condition\" of a vote is constructed as follows:\n"
-                        <> "- Firstly, if there is a `!` at the beginning of the end condition then the vote will not end prematurely when all votes are in.\n"
-                        <> "- Next, optional time constraints can be specified. To specify a period of time, use the syntax `XXdYYhZZm`, where `XX`, `YY`, and `ZZ` are numbers denoting how many days, minutes, and seconds the vote is to last. Parts of this can be omitted, e.g. `YYhZZm`. Alternatively, you can specify the precise time the vote is to end using `HH:MM+D` syntax, where `HH` is the hours (in the 24 hour clock), `MM` is the minutes, and `DD` is the offset in days from the next instance of that time.\n"
+        <> "- Firstly, if there is a `!` at the beginning of the end condition then the vote will not end prematurely when all votes are in.\n"
+        <> "- Next, optional time constraints can be specified. To specify a period of time, use the syntax `XXdYYhZZm`, where `XX`, `YY`, and `ZZ` are numbers denoting how many days, minutes, and seconds the vote is to last. Parts of this can be omitted, e.g. `YYhZZm`. Alternatively, you can specify the precise time the vote is to end using `HH:MM+D` syntax, where `HH` is the hours (in the 24 hour clock), `MM` is the minutes, and `DD` is the offset in days from the next instance of that time.\n"
+  let articleGeneral = "Usage: `!rule/motion <n>`. Retrieves rule <n> or motion <n> respectively. Can also be called inline with `!r<n>`/`!m<n>`.\n"
+        <> "There are several other commands that start with `!rule` or `!motion`:\n"
+        <> "- `!rule/motion new`\n"
+        <> "- `!rule/motion edit`\n"
+        <> "- `!rule/motion repeal`\n"
+        <> "- `!rule/motion delete`\n"
+        <> "Type `!help` before any of these commands to learn more about them (e.g. `!help motion new`)."
+  let articleNew = undefined
+  let articleEdit = undefined
+  let articleRepeal = undefined
+  let articleDelete = undefined
 
   sendMessage (messageChannel m)
     (case s of
@@ -99,12 +110,25 @@ enactCommand m (Help s) = do
         <> "Displays the current scores of all the players."
       Just "addscore" -> "Usage: `!addscore <player> <delta> [<player> <delta>...]`\n"
         <> "Changes `<player>`'s score by `<delta>`. You must tag `<player` or type their exact name to use this command. You can specify multiple players and changes. For example: `!addscore @Alice 3 Bob -2` will increase Alice's score by 3 and decrease Bob's by 2."
-      Just "rule" -> "Usage: `!rule <rule_number>`\n"
-        <> "Retrieves the rule numbered `<rule_number>`. You can also call this inline with `!r<rule_number>`."
-      Just "motion" -> "Usage: `!motion <motion_number>`\n"
-        <> "Retrieves the motion numbered `<motion_number>`. You can also call this inline with `!m<motion_number>`."
+      Just "rule" -> articleGeneral
+      Just "motion" -> articleGeneral
+      Just "rule new" -> articleNew
+      Just "motion new" -> articleNew
+      Just "rule edit" -> articleEdit
+      Just "motion edit" -> articleEdit
+      Just "rule repeal" -> articleRepeal
+      Just "motion repeal" -> articleRepeal
+      Just "rule delete" -> articleDelete
+      Just "motion delete" -> articleDelete
       Just "roll" -> "Usage: `!roll <x>d<y>`\n"
         <> "Rolls a d`<y>`dice `<x>` times and displays the results."
+      Just "vote" -> "There are several commands that start with `!vote`:\n"
+        <> "- `!vote new`\n"
+        <> "- `!vote edit subject`\n"
+        <> "- `!vote edit time`\n"
+        <> "- `!vote end`\n"
+        <> "- `!vote status`\n"
+        <> "Type `!help` before any of these commands to learn more about them (e.g. `!help vote end`)."
       Just "vote new" -> "Usage: `!vote new <end_condition> <purpose...`\n"
         <> "Starts a new vote on the subject of `<purpose>`.\n"
         <> voteEndConditionHelp
