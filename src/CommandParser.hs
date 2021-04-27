@@ -45,23 +45,23 @@ helpParser = do
     Just <$> choice (map string [ "help"
                                  , "scores"
                                  , "addscore"
-                                 , "rule"
                                  , "rule new"
                                  , "rule edit"
                                  , "rule repeal"
                                  , "rule delete"
-                                 , "motion"
+                                 , "rule"
                                  , "motion new"
                                  , "motion edit"
                                  , "motion repeal"
                                  , "motion delete"
+                                 , "motion"
                                  , "roll"
-                                 , "vote"
                                  , "vote new"
                                  , "vote edit subject"
                                  , "vote edit time"
                                  , "vote end"
-                                 , "vote status"])
+                                 , "vote status"
+                                 , "vote"])
 
 printScoresParser :: Parser Command
 printScoresParser = oneWordParser "!scores" PrintScores
@@ -146,6 +146,8 @@ fetchArticleParser = do
   atype <- parseArticleType
   skipSpace
   number <- decimal
+  skipSpace
+  endOfInput
   return . ArticleCommand
     $ FetchArticle atype number
 
@@ -172,8 +174,6 @@ deleteArticleParser = do
   atype <- parseArticleType <* string " delete"
   skipSpace
   number <- decimal
-  skipSpace
-  endOfInput
   return . ArticleCommand
     $ DeleteArticle atype number
 

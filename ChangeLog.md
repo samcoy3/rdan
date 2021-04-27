@@ -2,6 +2,13 @@
 
 ## Unreleased changes
 ### Added
+- The bot keeps track of rules and motions. No human now has to curate the rules and motions channels manually.
+  - Available commands for rule/motion management:
+    - "!rule/motion [number]" will fetch the rule or motion with the specified number. As before, "!r[n]/!m[n]" will work inline.
+    - "!rule/motion new [number]\n[body]" will post a new rule or motion.
+    - "!rule/motion edit [number]\n[body]" will edit a specified rule or motion.
+    - "!rule/motion repeal [number]" will repeal a specified rule or motion, leaving it formatted as struck-through.
+    - "!rule/motion delete [number]" will delete a specified rule or motion, deleting the posted message as well.
 - New syntax for vote-related activities:
   - !newvote -> !vote new
   - !votestatus -> !vote status [targets]
@@ -9,6 +16,7 @@
 - New vote actions:
   - "!vote edit subject [targets] [text]" will edit the subject of a vote.
   - "!vote edit time [targets] [time]" will re-set the time of a vote.
+- The state of the game is now read from a YAML file on startup and automatically saves during play.
 - New options when specifying the target of a !vote command:
   - A comma-separated list of vote IDs, e.g. "#1, #9,#3".
   - The word "all": applies the command to all currently running votes.
@@ -17,9 +25,8 @@
 ### Changed
 - Updated stackage snapshot to a more modern one.
 - Configuration is now done via a YAML file, rather than a .hs file.
-- The state of the game is now read from a YAML file on startup and automatically saves during play.
 - !addscore now does not require you to tag the target player. Instead, you can type their name, as registered in the game.
-- Updated the help text to reflect the new syntax.
+- Updated the help text to reflect the new syntax for votes and the new syntax for rules and motions.
 
 ### Deprecated
 - Deprecated the !newvote, !endvote, and !votestatus commands.

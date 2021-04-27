@@ -94,10 +94,18 @@ enactCommand m (Help s) = do
         <> "- `!rule/motion repeal`\n"
         <> "- `!rule/motion delete`\n"
         <> "Type `!help` before any of these commands to learn more about them (e.g. `!help motion new`)."
-  let articleNew = undefined
-  let articleEdit = undefined
-  let articleRepeal = undefined
-  let articleDelete = undefined
+  let articleNew = "Usage: `!rule/motion new [number]\\n<rule_or_motion_text>`.\n"
+        <> "Posts a new rule or motion to the respective channel.\n"
+        <> "You can optionally specify the number that the rule or motion should have. Alternatively, you can omit it, and the number above the current highest is selected.\n"
+        <> "After the optional number, add a newline and then put the body of the rule or motion that you wish to post."
+  let articleEdit = "Usage: `!rule/motion edit <number>\\n<rule_or_motion_text>`.\n"
+        <> "Edits the specified rule or motion.\n"
+        <> "After the number of the rule or motion, add a newline and then put the body of the rule or motion that you wish to post."
+  let articleRepeal = "Usage: `!rule/motion repeal <number>`.\n"
+        <> "Repeals the specified rule or motion. The rule or motion will be displayed struck-through.\n"
+        <> "If used on a rule or motion which is already repealed, this command will un-repeal it."
+  let articleDelete = "Usage: `!rule/motion delete <number>`\n"
+        <> "Deletes the specified rule or motion. This removes it from the bot's internal state and deletes the message in the channel. This command is not reversible."
 
   sendMessage (messageChannel m)
     (case s of
@@ -141,7 +149,7 @@ enactCommand m (Help s) = do
         <> voteTargetHelp
       Just "vote end" -> "Usage: `!vote end <targets>`\n"
         <> "Prematurely ends the vote(s) with the specified ID(s).\n"
-        <> "Note that a vote will end automatically once every player has voted or the time has been reached anyway; you should use this command only if you want to end the vote prior to everyone having voted."
+        <> "Note that a vote will end automatically once every player has voted or the time has been reached anyway; you should use this command only if you want to end the vote prior to everyone having voted.\n"
         <> voteTargetHelp
       Just "vote edit time" -> "Usage: `!vote edit time <targets> <end_condition>`\n"
         <> "Edits the time constraints of the target votes.\n"
@@ -303,7 +311,7 @@ enactCommand m (ArticleCommand (NewArticle atype number abody)) = do
   let existingArticle = currentArticles M.!? (atype, number')
   if isJust existingArticle
     then sendMessage (messageChannel m)
-         $ "Cannot post " <> (T.toLower . T.pack . show) atype <> ": one already exists with the same type and number"
+         $ "Cannot post " <> (T.toLower . T.pack . show) atype <> ": one already exists with the same type and number."
     else do
     amessage <- lift . restCall
       $ R.CreateMessage channel (prettyPrintFromText atype number' abody)
