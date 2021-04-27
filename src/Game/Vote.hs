@@ -35,6 +35,7 @@ data Vote = Vote { messages :: M.Map MessageId UserId
                  , responses :: M.Map UserId [Text]
                  , purpose :: Text
                  , announceChannel :: ChannelId
+                 , lastChecked :: Maybe UTCTime
                  , endCondition :: EndCondition UTCTime}
             deriving (Show, Generic)
 
@@ -83,6 +84,13 @@ bst :: TimeZone
 bst = TimeZone { timeZoneMinutes = 60
                , timeZoneSummerOnly = True
                , timeZoneName = "BST" }
+
+getEndTime :: Vote -> Maybe UTCTime
+getEndTime v =
+  case endCondition v of
+    AllVoted -> Nothing
+    AllVotedOrTimeUp t -> Just t
+    TimeUp t -> Just t
 
 utcFromHoursMinutesDayOffset :: (Int, Int, Integer) -> IO UTCTime
 utcFromHoursMinutesDayOffset (hours, minutes, dayOffset) = do

@@ -21,6 +21,8 @@
   - A comma-separated list of vote IDs, e.g. "#1, #9,#3".
   - The word "all": applies the command to all currently running votes.
 - The bot will react with a question mark when your command is invalid.
+- The bot can send reminders to players who haven't voted on votes which are about to end.
+  - Whether or not to do this, and the amount of forewarning, is configurable in the config.
 
 ### Changed
 - Updated stackage snapshot to a more modern one.

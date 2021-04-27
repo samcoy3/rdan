@@ -11,6 +11,11 @@
 # rdan will immediately end a vote if all players vote, as long as the vote may end when all players vote.
 # vote-poll-frequency:
 
+# Whether players who haven't voted on a vote should be reminded to vote before it ends.
+# vote-reminders: false
+# How far in advance, in minutes, players should be warned about impending votes which they haven't yet voted on.
+# vote-reminder-interval: 10
+
 # The players who will be playing the game.
 # For each player, a human-readable name, and their Discord user ID should be provided.
 # players:

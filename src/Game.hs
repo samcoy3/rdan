@@ -47,6 +47,7 @@ import qualified Data.Text as T
 import Data.Text (Text)
 import qualified Data.Map as M
 import Data.Map (Map)
+import Data.List ((\\))
 import Data.Yaml (encodeFile)
 
 import Discord
@@ -131,8 +132,39 @@ votePoller = do
                                        == playerCount)
                    $ currentVotes
   mapM_ endVote votesToEnd
+  sendReminders
+  modifyVotes (fmap (\v -> v {lastChecked = Just currentTime}))
   liftIO . threadDelay $ (1000000 * pollFrequency :: Int) -- Sleeps for fiteen seconds
   votePoller
+
+sendReminders :: BotM ()
+sendReminders = do
+  currentVotes <- votes <$> getGameState
+  currentTime <- liftIO getCurrentTime
+  reminders <- voteReminders <$> getConfig
+  reminderInterval <- (* 60) . voteReminderInterval <$> getConfig
+  if reminders
+    then forM_ currentVotes $ \v ->
+      case (lastChecked v, getEndTime v) of
+        (Just lastChecked, Just endTime) ->
+          if nominalDiffTimeToSeconds (diffUTCTime endTime lastChecked) > fromIntegral reminderInterval
+             && nominalDiffTimeToSeconds (diffUTCTime endTime currentTime) < fromIntegral reminderInterval
+             then let recipients = M.elems (messages v) \\ M.keys (M.filter (not . null) (responses v)) in
+                    forM_ recipients $ \r -> do
+                      dmChannel <- lift . restCall $ R.CreateDM r
+                      case dmChannel of
+                        Left _ -> return ()
+                        Right chan -> sendMessage (channelId chan)
+                          $ "**Vote reminder!**\n"
+                          <> "Remember to vote on the vote concerning **"
+                          <> (purpose v)
+                          <> "**! "
+                          <> "The vote ends in "
+                          <> (T.pack . show) (reminderInterval `div` 60)
+                          <>" minutes."
+             else return ()
+        _ -> return ()
+    else return ()
 
 endVote :: Int -> BotM ()
 endVote voteid = do

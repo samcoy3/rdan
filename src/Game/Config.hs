@@ -23,6 +23,8 @@ data Config = Config
     rulesChannel :: ChannelId,
     motionsChannel :: ChannelId,
     votePollFrequency :: Int,
+    voteReminders :: Bool,
+    voteReminderInterval :: Int,
     players :: [Player]
   }
   deriving (Eq, Show)
@@ -46,6 +48,8 @@ instance FromJSON Config where
     c .: "rules-channel" <*>
     c .: "motions-channel" <*>
     c .:? "vote-poll-frequency" .!= 15 <*>
+    c .:? "vote-reminders" .!= False <*>
+    c .:? "vote-reminder-interval" .!= 10 <*>
     c .: "players"
   parseJSON _ = fail "Failed to parse config"
 

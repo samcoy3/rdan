@@ -230,6 +230,7 @@ enactCommand m (VoteCommand (NewVote endCon purpose')) = do
                           , responses = M.fromList $ zip playerIDs $ repeat []
                           , purpose = purpose'
                           , announceChannel = messageChannel m
+                          , lastChecked = Nothing
                           , endCondition = endCon'}))
 
 enactCommand m (VoteCommand (EditVoteTime voteids endCon)) = do
