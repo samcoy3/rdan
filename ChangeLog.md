@@ -1,6 +1,8 @@
 # Changelog for rdan
 
 ## Unreleased changes
+
+## [1.0] - 2021-04-27
 ### Added
 - The bot keeps track of rules and motions. No human now has to curate the rules and motions channels manually.
   - Available commands for rule/motion management:
