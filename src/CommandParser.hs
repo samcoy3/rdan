@@ -163,6 +163,8 @@ deleteArticleParser = do
   atype <- parseArticleType <* string " delete"
   skipSpace
   number <- decimal
+  skipSpace
+  endOfInput
   return . ArticleCommand
     $ DeleteArticle atype number
 

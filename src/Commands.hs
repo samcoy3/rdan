@@ -300,7 +300,17 @@ enactCommand m (ArticleCommand (FetchArticle atype number)) = fetchArticle (mess
 enactCommand m (ArticleCommand (FetchArticleInline fetches)) = forM_ fetches $ \(atype, number) ->
   fetchArticle (messageChannel m) (atype, number)
 
-enactCommand m (ArticleCommand (EditArticle atype number newbody)) = do
+enactCommand m (ArticleCommand (EditArticle atype number newbody)) =
+  modifyArticle m (atype, number)
+    (\a -> a {body = newbody})
+    (printArticleName atype number <> " edited!")
+
+enactCommand m (ArticleCommand (RepealArticle atype number)) =
+  modifyArticle m (atype, number)
+    (\a -> a {repealed = not $ repealed a})
+    (printArticleName atype number <> " repealed!")
+
+enactCommand m (ArticleCommand (DeleteArticle atype number)) = do
   articleChannel <- getArticleChannel atype
   currentArticles <- articles <$> getGameState
   let existingArticle = currentArticles M.!? (atype, number)
@@ -308,16 +318,10 @@ enactCommand m (ArticleCommand (EditArticle atype number newbody)) = do
     Nothing -> sendMessage (messageChannel m)
       $ "Couldn't find " <> printArticleName atype number <> "!"
     Just article -> do
-      let newarticle = article {body = newbody}
-      editMessage articleChannel (message article) (prettyPrintFromArticle atype number newarticle)
-      modifyArticles
-        (M.adjust (const newarticle) (atype, number))
+      void . lift . restCall $ R.DeleteMessage (articleChannel, message article)
+      modifyArticles (M.delete (atype, number))
       sendMessage (messageChannel m)
-        $ (printArticleName atype number) <> " updated!"
-
-enactCommand m (ArticleCommand (RepealArticle atype number)) = undefined
-
-enactCommand m (ArticleCommand (DeleteArticle atype number)) = undefined
+        $ printArticleName atype number <> " deleted!"
 
 --- MISC ---
 printScores :: Message -> BotM ()
@@ -333,24 +337,23 @@ fetchArticle channel query@(atype, number) = do
   article <- (M.!? query) . articles <$> getGameState
   sendMessage channel $
     case article of
-      Nothing -> "Could not find " <> printArticleName atype number <> "!"
+      Nothing -> "Couldn't find " <> printArticleName atype number <> "!"
       Just article -> prettyPrintFromArticle atype number article
 
--- getRetrieveable :: Retrievable -> BotM (Either Retrievable Text)
--- getRetrieveable retr =
---   do
---     channel <- case retr of
---       Rule _ -> rulesChannel <$> getConfig
---       Motion _ -> motionsChannel <$> getConfig
---     messages <- lift . restCall $
---                 R.GetChannelMessages channel (100, R.LatestMessages)
---     let validRules = filter
---                      (\t -> T.pack ("**" ++ show retr ++ "**") `T.isPrefixOf` t)
---                      (map messageText $ fromRight [] messages)
---     return $
---       if null validRules
---       then Left retr
---       else Right (head validRules)
+modifyArticle :: Message -> (ArticleType, Int) -> (Article -> Article) -> Text -> BotM ()
+modifyArticle m (atype, number) mod onSuccess = do
+  articleChannel <- getArticleChannel atype
+  currentArticles <- articles <$> getGameState
+  let existingArticle = currentArticles M.!? (atype, number)
+  case existingArticle of
+    Nothing -> sendMessage (messageChannel m)
+      $ "Couldn't find " <> printArticleName atype number <> "!"
+    Just article -> do
+      let newarticle = mod article
+      editMessage articleChannel (message newarticle) (prettyPrintFromArticle atype number newarticle)
+      modifyArticles
+        (M.adjust (const newarticle) (atype, number))
+      sendMessage (messageChannel m) onSuccess
 
 getDMs :: [UserId] -> BotM [Channel]
 getDMs users = traverse (lift . restCall . R.CreateDM) users >>= return . rights
