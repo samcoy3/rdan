@@ -16,6 +16,11 @@
 # How far in advance, in minutes, players should be warned about impending votes which they haven't yet voted on.
 # vote-reminder-interval: 10
 
+# The reactions which the bot should use to react to vote messages, by default.
+# The reactions will be used in order.
+# The default is an empty list of reactions.
+# default-voting-reactions: []
+
 # The players who will be playing the game.
 # For each player, a human-readable name, and their Discord user ID should be provided.
 # players:

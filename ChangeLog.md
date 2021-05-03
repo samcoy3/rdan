@@ -1,6 +1,15 @@
 # Changelog for rdan
 
 ## Unreleased changes
+### Added
+- A "default reactions" setting has been added to the config. The bot will react to new vote messages using these reactions, in the order they are specified.
+
+### Changes
+- "!addscore" no longer prints the full list of scores. Instead it prints the scores that changed, inline.
+
+### Fixed
+- Fixed "!help" showing an imcomplete list of commands.
+- Fixed "!help vote new" showing incorrect examples.
 
 ## [1.0] - 2021-04-27
 ### Added

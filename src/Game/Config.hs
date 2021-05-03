@@ -25,6 +25,7 @@ data Config = Config
     votePollFrequency :: Int,
     voteReminders :: Bool,
     voteReminderInterval :: Int,
+    defaultReacts :: [Text],
     players :: [Player]
   }
   deriving (Eq, Show)
@@ -50,6 +51,7 @@ instance FromJSON Config where
     c .:? "vote-poll-frequency" .!= 15 <*>
     c .:? "vote-reminders" .!= False <*>
     c .:? "vote-reminder-interval" .!= 10 <*>
+    c .:? "default-voting-reactions" .!= [] <*>
     c .: "players"
   parseJSON _ = fail "Failed to parse config"
 

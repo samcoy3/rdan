@@ -1,7 +1,9 @@
 module Commands where
 
 import Data.Either
+import Data.Function (on)
 import Data.Maybe
+import Data.List (sortBy)
 import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.Text as T
@@ -30,7 +32,6 @@ type ScoreMap = M.Map UserId Int
 data AbsoluteTime = AbsTime { hours :: Int
                             , minutes :: Int
                             , dayOffset :: Integer } deriving (Show, Eq)
--- data Retrievable = Rule Int | Motion Int deriving  (Show, Eq)
 
 type Time = Either NominalDiffTime AbsoluteTime
 fixTime :: Time -> BotM UTCTime
@@ -111,7 +112,7 @@ enactCommand m (Help s) = do
     (case s of
       Nothing -> "I'm rdan, the robot delightfully aiding Nomic.\n"
         <> "To view help on a specific command, type `!help` followed by the command you want to learn about. For example: `!help scores` to learn more about the `!scores` command.\n"
-        <> "The list of commands available are as follows: `help`, `scores`, `addscore`, `rule`, `motion`, `roll`, `vote new`, `vote edit time`, `vote edit subject`, `vote status`, `vote end`."
+        <> "The list of commands available are as follows: `help`, `scores`, `addscore`, `rule/motion`, `rule/motion new`, `rule/motion edit`, `rule/motion repeal`, `rule/motion delete`, `roll`, `vote new`, `vote edit time`, `vote edit subject`, `vote status`, `vote end`."
       Just "help" -> "To view help on a specific command, type `!help` followed by the command you want to learn about. For example: `!help scores` to learn more about the `!scores` command.\n"
         <> "The list of commands available are as follows: `help`, `scores`, `addscore`, `rule`, `motion`, `newote`, `roll`, `votestatus`, `endvote`."
       Just "scores" -> "Usage: `!scores`\n"
@@ -141,9 +142,9 @@ enactCommand m (Help s) = do
         <> "Starts a new vote on the subject of `<purpose>`.\n"
         <> voteEndConditionHelp
         <> "\nExamples:\n "
-        <> "- `!newvote Apples` will start a new vote on the subject of Apples. The vote will only end when everyone has voted.\n"
-        <> "- `!newvote 24h Derek` will start a new vote on the subject of Derek. The vote lasts 24 hours, but can end early (if everyone votes before then).\n"
-        <> "- `!newvote !18:00+1 Snakes` will start a new vote on the subject of Snakes. The vote will end at the 18:00 after next (if this vote was proposed on Tuesday at 1700, this would be Wednesday at 1800; if this vote was proposed on Tuesday at 1900, this would be Thursday at 1900). The vote may not end early, even if everyone has voted."
+        <> "- `!vote new Apples` will start a new vote on the subject of Apples. The vote will only end when everyone has voted.\n"
+        <> "- `!vote new 24h Derek` will start a new vote on the subject of Derek. The vote lasts 24 hours, but can end early (if everyone votes before then).\n"
+        <> "- `!vote new !18:00+1 Snakes` will start a new vote on the subject of Snakes. The vote will end at the 18:00 after next (if this vote was proposed on Tuesday at 1700, this would be Wednesday at 1800; if this vote was proposed on Tuesday at 1900, this would be Thursday at 1900). The vote may not end early, even if everyone has voted."
       Just "vote status" -> "Usage: `!vote status <targets>`\n"
         <> "Queries the status of the ongoing votes. Will show how many people have voted, and display the subject of the vote.\n"
         <> voteTargetHelp
@@ -165,7 +166,8 @@ enactCommand m (Help s) = do
 enactCommand m PrintScores = printScores m
 
 enactCommand m (AddToScore cs) = do
-  forM_ cs $ \(target, delta) -> do
+  config <- getConfig
+  deltas <- forM cs $ \(target, delta) -> do
     scores <- scores <$> getGameState
     player <- case target of
       Left uid -> return $ Right uid
@@ -175,31 +177,19 @@ enactCommand m (AddToScore cs) = do
           Nothing -> return $ Left name
           Just uid -> return $ Right uid
     case player of
-      Left text ->
-        sendMessage (messageChannel m) $
-        "Could not find player **" <> text <> "**."
-      Right uid ->
+      Left text -> do
+        sendMessage (messageChannel m)
+          $ "Could not find player **" <> text <> "**."
+        return Nothing
+      Right uid -> do
+        let oldScore = scores M.! uid
         modifyScore uid delta
-  sendMessage (messageChannel m) "Scores updated."
-  printScores m
-
--------- FINDING --------
--- enactCommand m (Find x) = do
---   result <- getRetrieveable x
---   sendMessage  (messageChannel m) $
---     (case result of
---        Left retr -> (T.pack . show $ retr) <> " not found, sorry!"
---        Right ruleText -> T.unlines . tail . T.lines $ ruleText
---     )
-
--- enactCommand m (FindInline xs) = do
---   results <- forM xs $ getRetrieveable
---   sendMessage  (messageChannel m ) $
---     T.unlines $
---     map (\r -> case r of
---             Left retr -> "Could not find " <> (T.pack . show $ retr) <> "."
---             Right ruleText -> ruleText
---         ) results
+        return $ Just (getPlayerNameFromID config uid, oldScore, oldScore + delta)
+  let successes = catMaybes (NE.toList deltas)
+  if null successes
+    then return ()
+    else sendMessage (messageChannel m)
+      $ printDeltas (NE.fromList successes)
 
 -------- ROLLING --------
 enactCommand m (Roll quant sides) = do
@@ -213,12 +203,27 @@ enactCommand m (Roll quant sides) = do
 -- TODO: This handles failure to establish message channels very poorly.
 enactCommand m (VoteCommand (NewVote endCon purpose')) = do
   playerIDs <- getPlayerIDs <$> getConfig
+  reacts <- defaultReacts <$> getConfig
   currentVotes <- votes <$> getGameState
   endCon' <- traverse fixTime endCon
+
+  -- Getting the DM channels for the users who need to be messaged
   userHandles <- getConfig >>= getDMs . getPlayerIDs
-  messageHandles <- mapM ((\c -> lift . restCall
-                            $ R.CreateMessage c
-                            $ userDMDescription purpose' endCon') . channelId) userHandles
+  -- Sending the vote messages to the users (keeping the channels attached, for now)
+  messageHandles <- zip userHandles <$>
+    forM userHandles
+      ((\c -> lift . restCall
+      $ R.CreateMessage c
+      $ userDMDescription purpose' endCon') . channelId)
+
+  -- "Pre-reacting" to the messages using the reacts specified in the config.
+  forM_ reacts $ \r ->
+    forM_ messageHandles $ \(u, m') ->
+      case m' of
+        Left _ -> return ()
+        Right m ->
+          void . lift . restCall
+          $ R.CreateReaction (channelId u, messageId m) r
 
   let newid = (+1) $ max 0 (if null (M.keys currentVotes)
                             then 0
@@ -226,7 +231,7 @@ enactCommand m (VoteCommand (NewVote endCon purpose')) = do
 
   sendMessage (messageChannel m) $ "A new vote has been started, and players have been notified. The vote ID is #" <> (T.pack . show) newid
   modifyVotes
-    (M.insert newid (Vote { messages = M.fromList $ zip (map messageId $ rights messageHandles) playerIDs
+    (M.insert newid (Vote { messages = M.fromList $ zip (map messageId $ rights . fmap snd $ messageHandles) playerIDs
                           , responses = M.fromList $ zip playerIDs $ repeat []
                           , purpose = purpose'
                           , announceChannel = messageChannel m
@@ -362,8 +367,21 @@ printScores m = do
   config <- getConfig
   currentScores <- scores <$> getGameState
   let scoreText = "The current scores are:\n"
-        `T.append` T.unlines [(getPlayerNameFromID config p) <> ": " <> (T.pack . show) score | (p,score) <- M.toList currentScores]
+        <> T.unlines ["**"
+                      <> getPlayerNameFromID config p
+                      <> "**: "
+                      <> (T.pack . show) score
+                     | (p,score) <- sortBy (compare `on` fst) $ M.toList currentScores]
   sendMessage (messageChannel m) scoreText
+
+printDeltas :: NonEmpty (Text, Int, Int) -> Text
+printDeltas deltas =
+  let deltaTexts = fmap
+        (\(player, old, new) -> "**" <> player <> "**: " <> (T.pack . show) old <> " ⟶ " <> (T.pack . show) new)
+        deltas
+  in "Scores updated ("
+        <> T.intercalate ", " (NE.toList deltaTexts)
+        <> ")."
 
 fetchArticle :: ChannelId -> (ArticleType, Int) -> BotM ()
 fetchArticle channel query@(atype, number) = do
