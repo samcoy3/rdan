@@ -1,6 +1,8 @@
 # Changelog for rdan
 
 ## Unreleased changes
+
+## [1.0.1] - 2021-05-03
 ### Added
 - A "default reactions" setting has been added to the config. The bot will react to new vote messages using these reactions, in the order they are specified.
 
