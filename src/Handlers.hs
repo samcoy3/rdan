@@ -52,10 +52,14 @@ addReactToVote reactInfo = do
     then return ()
     else do
     let (voteid, vote) = (head . M.toList) correspondingVotes
+    let emojiTitle = emojiName . reactionEmoji $ reactInfo
+    let emojiText = case emojiId . reactionEmoji $ reactInfo of
+          Nothing -> emojiTitle
+          Just id -> "<:" <> emojiTitle <> ":" <> (T.pack . show) id <> ">"
     modifyVotes $
       M.adjust
       (\vote -> vote {responses = M.adjust
-                       (\t -> t++[emojiName . reactionEmoji $ reactInfo])
+                       (\t -> t++[emojiText])
                        ((messages vote) M.! (reactionMessageId reactInfo))
                        (responses vote)})
       voteid

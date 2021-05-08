@@ -1,6 +1,12 @@
 # Changelog for rdan
 
 ## Unreleased changes
+### Changed
+- "!scores" now prints the scores in order, from highest to lowest.
+- "!rule/motion edit" is now less fussy about superfluous horizontal space.
+
+### Fixed
+- The bot properly displays custom emoji in voting results.
 
 ## [1.0.1] - 2021-05-03
 ### Added

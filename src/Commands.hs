@@ -371,7 +371,7 @@ printScores m = do
                       <> getPlayerNameFromID config p
                       <> "**: "
                       <> (T.pack . show) score
-                     | (p,score) <- sortBy (compare `on` fst) $ M.toList currentScores]
+                     | (p,score) <- sortBy (compare `on` (negate . snd)) $ M.toList currentScores]
   sendMessage (messageChannel m) scoreText
 
 printDeltas :: NonEmpty (Text, Int, Int) -> Text

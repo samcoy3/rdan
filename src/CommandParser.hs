@@ -136,6 +136,7 @@ newArticleParser = do
   atype <- parseArticleType <* string " new"
   skipWhile isHorizontalSpace
   number <- optional decimal
+  skipWhile isHorizontalSpace
   endOfLine
   abody <- takeText
   return . ArticleCommand
@@ -156,6 +157,7 @@ editArticleParser = do
   atype <- parseArticleType <* string " edit"
   skipSpace
   number <- decimal
+  skipWhile isHorizontalSpace
   endOfLine
   abody <- takeText
   return . ArticleCommand
