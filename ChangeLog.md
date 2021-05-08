@@ -1,6 +1,8 @@
 # Changelog for rdan
 
 ## Unreleased changes
+
+## [1.0.2] - 2021-05-08
 ### Changed
 - "!scores" now prints the scores in order, from highest to lowest.
 - "!rule/motion edit" is now less fussy about superfluous horizontal space.
