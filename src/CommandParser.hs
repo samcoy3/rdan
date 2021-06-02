@@ -97,13 +97,13 @@ flipParser :: Parser Command
 flipParser = do
   string "!flip"
   skipSpace
-  Flip <$> parseArguments
+  Flip <$> option [] parseArguments
 
 shuffleParser :: Parser Command
 shuffleParser = do
   string "!shuffle"
   skipSpace
-  Shuffle <$> parseArguments
+  Shuffle <$> option [] parseArguments
 
 newVoteParser :: Parser Command
 newVoteParser = do
@@ -217,6 +217,8 @@ badCommandParser = do
                             , "rule"
                             , "motion"
                             , "roll"
+                            , "flip"
+                            , "shuffle"
                             , "newvote"
                             , "votestatus"
                             , "endvote"
@@ -229,8 +231,8 @@ badCommandParser = do
 oneWordParser :: Text -> Command -> Parser Command
 oneWordParser commandText command = string commandText >> return command
 
-parseArguments :: Parser (NonEmpty Text)
-parseArguments = fromList <$> (term <|> quotedTerm) `sepBy1` skipSpace
+parseArguments :: Parser [Text]
+parseArguments = (term <|> quotedTerm) `sepBy1` skipSpace
   where
     term = takeWhile1 (\c -> c /= '"' && not (isHorizontalSpace c))
     quotedTerm = do

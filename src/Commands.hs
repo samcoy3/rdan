@@ -75,8 +75,8 @@ data Command =
   | PrintScores
   | AddToScore (NonEmpty (Either UserId Text, Int))
   | Roll Int Int
-  | Flip (NonEmpty Text)
-  | Shuffle (NonEmpty Text)
+  | Flip [Text]
+  | Shuffle [Text]
   | VoteCommand VoteAction
   | ArticleCommand ArticleAction
   | BadCommand
@@ -136,9 +136,11 @@ enactCommand m (Help s) = do
       Just "roll" -> "Usage: `!roll <x>d<y>`\n"
         <> "Rolls a d`<y>`dice `<x>` times and displays the results."
       Just "flip" -> "Usage: `!flip <thing1> <thing2>...`\n"
-        <> "Chooses one of the arguments provided to it at random. You can quote a thing in order to include a multi-word item: `!flip Apples \"Leonard Cohen\"` will choose between Apples and Leonard Cohen."
+        <> "Chooses one of the arguments provided to it at random. You can quote a thing in order to include a multi-word item: `!flip Apples \"Leonard Cohen\"` will choose between Apples and Leonard Cohen.\n"
+        <> "If no arguments are provided, the list of players is used instead."
       Just "shuffle" -> "Usage: `!shuffle <thing1> <thing2>...`\n"
-        <> "Orders the arguments provided to it at random. You can quote a thing in order to include a multi-word item: `!shuffle Apples \"Leonard Cohen\"` will randomly order Apples and Leonard Cohen."
+        <> "Orders the arguments provided to it at random. You can quote a thing in order to include a multi-word item: `!shuffle Apples \"Leonard Cohen\"` will randomly order Apples and Leonard Cohen.\n"
+        <> "If no arguments are provided, the list of players is used instead."
       Just "vote" -> "There are several commands that start with `!vote`:\n"
         <> "- `!vote new`\n"
         <> "- `!vote edit subject`\n"
@@ -208,12 +210,14 @@ enactCommand m (Roll quant sides) = do
     (T.pack . show $ rolls)
 
 enactCommand m (Flip options) = do
+  options <- if null options then getPlayerNames <$> getConfig else return options
   selection <- liftIO $ randomRIO (0, length options - 1)
   sendMessage (messageChannel m) $
-    options NE.!! selection
+    options !! selection
 
 enactCommand m (Shuffle options) = do
-  let optionVector = Vec.fromList . NE.toList $ options
+  options <- if null options then getPlayerNames <$> getConfig else return options
+  let optionVector = Vec.fromList options
   -- Create a sequence of Fischer-Yates swaps
   swaps <-
     fmap (\(a, b) vec -> vec Vec.// [(a, vec Vec.! b), (b, vec Vec.! a)]) <$>

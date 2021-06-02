@@ -1,6 +1,8 @@
 # Changelog for rdan
 
 ## Unreleased changes
+### Changed
+- "!flip" and "!shuffle" now both use the list of players by default if no options are provided.
 
 ## [1.0.3] - 2021-06-02
 ### Added
