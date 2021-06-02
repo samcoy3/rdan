@@ -28,6 +28,7 @@ dependencies:
 - attoparsec
 - random
 - time
+- vector
 - aeson
 - yaml
 - mtl

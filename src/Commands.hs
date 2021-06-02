@@ -1,7 +1,8 @@
 module Commands where
 
 import Data.Either
-import Data.Function (on)
+import Data.Function (on, (&))
+import Data.Foldable (foldl')
 import Data.Maybe
 import Data.List (sortBy)
 import qualified Data.List.NonEmpty as NE
@@ -16,6 +17,7 @@ import Control.Concurrent.STM.TVar
 import Data.Time.Clock
 import Data.Time.Calendar
 import Data.Time.LocalTime
+import qualified Data.Vector as Vec
 import System.Random
 import Text.Read hiding (lift)
 
@@ -73,6 +75,8 @@ data Command =
   | PrintScores
   | AddToScore (NonEmpty (Either UserId Text, Int))
   | Roll Int Int
+  | Flip (NonEmpty Text)
+  | Shuffle (NonEmpty Text)
   | VoteCommand VoteAction
   | ArticleCommand ArticleAction
   | BadCommand
@@ -131,6 +135,10 @@ enactCommand m (Help s) = do
       Just "motion delete" -> articleDelete
       Just "roll" -> "Usage: `!roll <x>d<y>`\n"
         <> "Rolls a d`<y>`dice `<x>` times and displays the results."
+      Just "flip" -> "Usage: `!flip <thing1> <thing2>...`\n"
+        <> "Chooses one of the arguments provided to it at random. You can quote a thing in order to include a multi-word item: `!flip Apples \"Leonard Cohen\"` will choose between Apples and Leonard Cohen."
+      Just "shuffle" -> "Usage: `!shuffle <thing1> <thing2>...`\n"
+        <> "Orders the arguments provided to it at random. You can quote a thing in order to include a multi-word item: `!shuffle Apples \"Leonard Cohen\"` will randomly order Apples and Leonard Cohen."
       Just "vote" -> "There are several commands that start with `!vote`:\n"
         <> "- `!vote new`\n"
         <> "- `!vote edit subject`\n"
@@ -198,6 +206,24 @@ enactCommand m (Roll quant sides) = do
     (T.pack . show . sum $ rolls) <>
     " ⟵ " <>
     (T.pack . show $ rolls)
+
+enactCommand m (Flip options) = do
+  selection <- liftIO $ randomRIO (0, length options - 1)
+  sendMessage (messageChannel m) $
+    options NE.!! selection
+
+enactCommand m (Shuffle options) = do
+  let optionVector = Vec.fromList . NE.toList $ options
+  -- Create a sequence of Fischer-Yates swaps
+  swaps <-
+    fmap (\(a, b) vec -> vec Vec.// [(a, vec Vec.! b), (b, vec Vec.! a)]) <$>
+    zip [0..] <$>
+    (liftIO . sequence $
+     (\lower -> randomRIO (lower, Vec.length optionVector - 1))
+     <$> [0..Vec.length optionVector - 2])
+  let shuffledVector = foldl' (&) optionVector swaps
+  sendMessage (messageChannel m)
+    $ T.intercalate "; " (Vec.toList shuffledVector)
 
 -------- VOTING --------
 -- TODO: This handles failure to establish message channels very poorly.

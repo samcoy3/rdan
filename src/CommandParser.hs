@@ -7,7 +7,8 @@ import Control.Monad (join)
 import Data.Char
 import Data.Functor (($>))
 import Data.Text (Text, unpack, pack)
-import Data.List.NonEmpty (fromList)
+import qualified Data.Text as T (unwords)
+import Data.List.NonEmpty (NonEmpty, fromList)
 import Control.Applicative
 
 import Data.Time.Clock
@@ -21,6 +22,8 @@ commandParser = helpParser
                 <|> printScoresParser
                 <|> addToScoreParser
                 <|> rollParser
+                <|> flipParser
+                <|> shuffleParser
                 -- Votes
                 <|> newVoteParser
                 <|> voteEditTimeParser
@@ -56,6 +59,8 @@ helpParser = do
                                  , "motion delete"
                                  , "motion"
                                  , "roll"
+                                 , "flip"
+                                 , "shuffle"
                                  , "vote new"
                                  , "vote edit subject"
                                  , "vote edit time"
@@ -87,6 +92,18 @@ rollParser = do
   char 'd'
   sidedness <- decimal
   return $ Roll quantity sidedness
+
+flipParser :: Parser Command
+flipParser = do
+  string "!flip"
+  skipSpace
+  Flip <$> parseArguments
+
+shuffleParser :: Parser Command
+shuffleParser = do
+  string "!shuffle"
+  skipSpace
+  Shuffle <$> parseArguments
 
 newVoteParser :: Parser Command
 newVoteParser = do
@@ -211,6 +228,16 @@ badCommandParser = do
 
 oneWordParser :: Text -> Command -> Parser Command
 oneWordParser commandText command = string commandText >> return command
+
+parseArguments :: Parser (NonEmpty Text)
+parseArguments = fromList <$> (term <|> quotedTerm) `sepBy1` skipSpace
+  where
+    term = takeWhile1 (\c -> c /= '"' && not (isHorizontalSpace c))
+    quotedTerm = do
+      char '"'
+      quoted <- term `sepBy1` skipSpace
+      char '"'
+      return (T.unwords quoted)
 
 parseUserId :: Parser UserId
 parseUserId = do
