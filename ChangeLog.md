@@ -1,6 +1,8 @@
 # Changelog for rdan
 
 ## Unreleased changes
+
+## [1.0.3] - 2021-06-02
 ### Added
 - Added "!flip", to choose randomly between a series of options.
 - Added "!shuffle", to order a series of options randomly.
