@@ -53,14 +53,13 @@ publicDescription :: Int -> Vote -> Text
 publicDescription playerCount vote =
   let voteCountText = if allPlayersHaveVoted playerCount vote
         then ":ballot_box: **All players have voted.** "
-        else "So far, out of the " <>
+        else  (T.pack . show . M.size . M.filter (/= []) $ responses vote) <>
+                "/" <>
                 (T.pack . show $ playerCount) <>
-                " players, " <>
-                (T.pack . show . M.size . M.filter (/= []) $ responses vote) <>
-                " have voted. "
+                " votes. "
   in "On the subject of **" <>
   purpose vote <>
-  "**. " <>
+  "**.\n" <>
   voteCountText <>
   (endConditionDescription . endCondition) vote
 
@@ -74,15 +73,15 @@ userDMDescription purpose endCondition =
 
 endConditionDescription :: EndCondition UTCTime -> Text
 endConditionDescription AllVoted =
-  "The vote will end when everyone has voted; there is no time limit."
+  "The vote will end when everyone has voted."
 endConditionDescription (AllVotedOrTimeUp t) =
-  "The vote will end when everyone has voted, or at " <>
+  "The vote will end at " <>
   printTime t <>
-  ", whichever comes first."
+  ", or when all players have voted."
 endConditionDescription (TimeUp t) =
   "The vote will end at " <>
   printTime t <>
-  " and not before."
+  "."
 
 printTime :: UTCTime -> Text
 printTime = T.pack .

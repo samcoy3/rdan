@@ -308,7 +308,7 @@ enactCommand m (VoteCommand (EditVoteSubject voteids newSubject)) = do
 enactCommand m (VoteCommand (VoteStatus voteids)) = do
   endAllAutomatically <- endAllVotesWhenAllVoted <$> getConfig
   let endAllAutomaticallyNotice = if endAllAutomatically
-        then "*The setting `end-all-votes-automatically` is enabled. When all players have voted on all concurrent votes, the votes will all end regardless of the above end conditions.*"
+        then "\n*The setting `end-all-votes-automatically` is enabled. When all players have voted on all concurrent votes, the votes will all end regardless of the above end conditions.*"
         else ""
   playerCount <- length . players <$> getConfig
   currentVotes <- votes <$> getGameState

@@ -1,6 +1,8 @@
 # Changelog for rdan
 
 ## Unreleased changes
+### Changed
+- Changed some of the "!vote status" text.
 
 ## [1.0.5] - 2021-06-06
 ### Changed
