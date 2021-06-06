@@ -1,6 +1,8 @@
 # Changelog for rdan
 
 ## Unreleased changes
+
+## [1.0.5] - 2021-06-06
 ### Changed
 - Added synonyms for adding and editing rules and motions.
   - For adding, "!rule add", "!rule create", and "!rule propose" are all now synonyms.
