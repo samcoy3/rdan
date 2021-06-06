@@ -150,7 +150,11 @@ endVoteParser = do
 
 newArticleParser :: Parser Command
 newArticleParser = do
-  atype <- parseArticleType <* string " new"
+  atype <- parseArticleType
+    <* (string " new"
+       <|> string " add"
+       <|> string " create"
+       <|> string " propose")
   skipWhile isHorizontalSpace
   number <- optional decimal
   skipWhile isHorizontalSpace
@@ -171,7 +175,10 @@ fetchArticleParser = do
 
 editArticleParser :: Parser Command
 editArticleParser = do
-  atype <- parseArticleType <* string " edit"
+  atype <- parseArticleType
+    <* (string " edit"
+       <|> string " modify"
+       <|> string " update")
   skipSpace
   number <- decimal
   skipWhile isHorizontalSpace

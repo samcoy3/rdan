@@ -1,6 +1,19 @@
 # Changelog for rdan
 
 ## Unreleased changes
+### Changed
+- Added synonyms for adding and editing rules and motions.
+  - For adding, "!rule add", "!rule create", and "!rule propose" are all now synonyms.
+  - For editing, "!rule modify" and "!rule update" are both now synonyms.
+- Changed vote status message to make it clearer when all players have voted.
+- Added config option "announce-channel". If set (to a channel ID), the result of votes are announced in there, rather than in the channel in which they were started.
+- Added config option "end-all-votes-automatically". If set as "true", the bot will end all concurrent votes when all players have voted on all of them, regardless of the settings set on the votes themselves.
+  - The bot will remind players that this setting is enabled, if it is, when "!vote status all" is used.
+- When a rule or motion is edited, the bot will display what it previously was.
+
+### Fixed
+- Fixed a bug where un-reacting with a custom emoji on a vote would not remove the vote.
+- The bot's reply after "!rule/motion repeal" now correctly indicates whether the the rule or motion was repealed, or unrepealed.
 
 ## [1.0.4] - 2021-06-02
 ### Changed

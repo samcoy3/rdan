@@ -33,21 +33,19 @@ instance FromJSON Article
 
 printArticleName :: ArticleType -> Int -> Text
 printArticleName atype number =
-  (T.pack . show) atype <> " " <> (T.pack . show) number
+  "**" <> (T.pack . show) atype <> " " <> (T.pack . show) number <> "**"
 
 prettyPrintFromText :: ArticleType -> Int -> Text -> Text
 prettyPrintFromText atype number text =
-  "**"
-  <> printArticleName atype number
-  <> ":**\n"
+  printArticleName atype number
+  <> ":\n"
   <> text
 
 prettyPrintFromArticle :: ArticleType -> Int -> Article -> Text
 prettyPrintFromArticle atype number article =
   repealChars
-  <> "**"
   <> printArticleName atype number
-  <> ":**\n"
+  <> ":\n"
   <> body article
   <> repealChars
   where repealChars = if repealed article then "~~" else ""

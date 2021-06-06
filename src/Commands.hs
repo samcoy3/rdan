@@ -306,6 +306,10 @@ enactCommand m (VoteCommand (EditVoteSubject voteids newSubject)) = do
     sendMessage (messageChannel m) "Subject for votes updated."
 
 enactCommand m (VoteCommand (VoteStatus voteids)) = do
+  endAllAutomatically <- endAllVotesWhenAllVoted <$> getConfig
+  let endAllAutomaticallyNotice = if endAllAutomatically
+        then "*The setting `end-all-votes-automatically` is enabled. When all players have voted on all concurrent votes, the votes will all end regardless of the above end conditions.*"
+        else ""
   playerCount <- length . players <$> getConfig
   currentVotes <- votes <$> getGameState
   vs <- getTargetVotes voteids
@@ -313,7 +317,8 @@ enactCommand m (VoteCommand (VoteStatus voteids)) = do
     case voteids of
       AllVotes -> sendMessage (messageChannel m) $
                   "The current active votes are as follows:\n" <>
-                  (T.unlines ["**Vote #" <> (T.pack . show) vid <> "**: " <> publicDescription playerCount vote | (vid, vote) <- M.toList currentVotes])
+                  (T.unlines ["**Vote #" <> (T.pack . show) vid <> "**: " <> publicDescription playerCount vote | (vid, vote) <- M.toList currentVotes]) <>
+                  endAllAutomaticallyNotice
       VoteList (voteids) -> sendMessage (messageChannel m) $
                       T.unlines $ (flip map $ NE.toList voteids)
                       (\v -> if v `elem` (M.keys currentVotes)
@@ -371,12 +376,14 @@ enactCommand m (ArticleCommand (FetchArticleInline fetches)) = forM_ fetches $ \
 enactCommand m (ArticleCommand (EditArticle atype number newbody)) =
   modifyArticle m (atype, number)
     (\a -> a {body = newbody})
-    (printArticleName atype number <> " edited!")
+    (\a -> printArticleName atype number
+      <> " edited! Was previously:\n"
+      <> body a)
 
 enactCommand m (ArticleCommand (RepealArticle atype number)) =
   modifyArticle m (atype, number)
     (\a -> a {repealed = not $ repealed a})
-    (printArticleName atype number <> " repealed!")
+    (\a -> printArticleName atype number <> (if repealed a then " unrepealed!" else " repealed!"))
 
 enactCommand m (ArticleCommand (DeleteArticle atype number)) = do
   articleChannel <- getArticleChannel atype
@@ -421,7 +428,7 @@ fetchArticle channel query@(atype, number) = do
       Nothing -> "Couldn't find " <> printArticleName atype number <> "!"
       Just article -> prettyPrintFromArticle atype number article
 
-modifyArticle :: Message -> (ArticleType, Int) -> (Article -> Article) -> Text -> BotM ()
+modifyArticle :: Message -> (ArticleType, Int) -> (Article -> Article) -> (Article -> Text) -> BotM ()
 modifyArticle m (atype, number) mod onSuccess = do
   articleChannel <- getArticleChannel atype
   currentArticles <- articles <$> getGameState
@@ -431,10 +438,11 @@ modifyArticle m (atype, number) mod onSuccess = do
       $ "Couldn't find " <> printArticleName atype number <> "!"
     Just article -> do
       let newarticle = mod article
+      let messageText = onSuccess article
       editMessage articleChannel (message newarticle) (prettyPrintFromArticle atype number newarticle)
       modifyArticles
         (M.adjust (const newarticle) (atype, number))
-      sendMessage (messageChannel m) onSuccess
+      sendMessage (messageChannel m) messageText
 
 getDMs :: [UserId] -> BotM [Channel]
 getDMs users = traverse (lift . restCall . R.CreateDM) users >>= return . rights

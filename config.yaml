@@ -1,30 +1,37 @@
 # The bot token which you obtained from the Discord developer site. Never share this.
-# bot-token:
+bot-token:
 
 # The channel IDs in which the rules and motions, respectively, are posted.
-# rules-channel:
-# motions-channel:
+rules-channel:
+motions-channel:
+
+# The channel IDs to announce votes in. If not set, votes are announced in the channel in which they are started.
+announce-channel:
 
 # The frequency with which rdan should check for finished votes, in seconds.
 # Usually about 10-15 seconds is fine.
 # The default if unspecified is 15 seconds.
 # rdan will immediately end a vote if all players vote, as long as the vote may end when all players vote.
-# vote-poll-frequency:
+vote-poll-frequency:
 
 # Whether players who haven't voted on a vote should be reminded to vote before it ends.
-# vote-reminders: false
+vote-reminders: false
 # How far in advance, in minutes, players should be warned about impending votes which they haven't yet voted on.
-# vote-reminder-interval: 10
+vote-reminder-interval: 10
+
+# If set to true, the bot will end all votes, when all players have voted on all of them.
+# This overrides the time constraints of the votes.
+end-all-votes-automatically: false
 
 # The reactions which the bot should use to react to vote messages, by default.
 # The reactions will be used in order.
 # The default is an empty list of reactions.
-# default-voting-reactions: []
+default-voting-reactions: []
 
 # The players who will be playing the game.
 # For each player, a human-readable name, and their Discord user ID should be provided.
-# players:
-#   - name:
-#     id:
-#   - name:
-#     id:
+players:
+  - name:
+    id:
+  - name:
+    id:

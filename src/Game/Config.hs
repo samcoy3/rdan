@@ -22,9 +22,11 @@ data Config = Config
   { botToken :: Text,
     rulesChannel :: ChannelId,
     motionsChannel :: ChannelId,
+    defaultAnnounceChannel :: Maybe ChannelId,
     votePollFrequency :: Int,
     voteReminders :: Bool,
     voteReminderInterval :: Int,
+    endAllVotesWhenAllVoted :: Bool,
     defaultReacts :: [Text],
     players :: [Player]
   }
@@ -48,9 +50,11 @@ instance FromJSON Config where
     c .: "bot-token" <*>
     c .: "rules-channel" <*>
     c .: "motions-channel" <*>
+    c .:? "announce-channel" <*>
     c .:? "vote-poll-frequency" .!= 15 <*>
     c .:? "vote-reminders" .!= False <*>
     c .:? "vote-reminder-interval" .!= 10 <*>
+    c .:? "end-all-votes-automatically" .!= False <*>
     c .:? "default-voting-reactions" .!= [] <*>
     c .: "players"
   parseJSON _ = fail "Failed to parse config"

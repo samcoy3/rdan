@@ -47,6 +47,7 @@ import qualified Data.Text as T
 import Data.Text (Text)
 import qualified Data.Map as M
 import Data.Map (Map)
+import Data.Maybe (fromMaybe)
 import Data.List ((\\))
 import Data.Yaml (encodeFile)
 
@@ -119,6 +120,7 @@ votePoller = do
   currentVotes <- votes <$> getGameState
   playerCount <- length . players <$> getConfig
   pollFrequency <- votePollFrequency <$> getConfig
+  endAllAutomatically <- endAllVotesWhenAllVoted <$> getConfig
   let votesToEnd = M.keys .
                    M.filter (\v -> case endCondition v of
                                      AllVoted ->
@@ -132,6 +134,9 @@ votePoller = do
                                        == playerCount)
                    $ currentVotes
   mapM_ endVote votesToEnd
+  currentVotes <- votes <$> getGameState
+  when (all (allPlayersHaveVoted playerCount) currentVotes && endAllAutomatically)
+    $ mapM_ endVote (M.keys currentVotes)
   sendReminders
   modifyVotes (fmap (\v -> v {lastChecked = Just currentTime}))
   liftIO . threadDelay $ (1000000 * pollFrequency :: Int) -- Sleeps for fiteen seconds
@@ -174,8 +179,9 @@ endVote voteid = do
   case particularVote of
     Nothing -> return ()
     Just vote -> do
+      let announceChannel' = fromMaybe (announceChannel vote) (defaultAnnounceChannel config)
       modifyVotes (M.delete voteid)
-      sendMessage (announceChannel vote) $
+      sendMessage (announceChannel') $
         "The vote on **" <>
         purpose vote <>
         "** has concluded. The results are:\n" <>

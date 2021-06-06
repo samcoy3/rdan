@@ -44,15 +44,24 @@ deriving instance FromJSONKey Snowflake
 instance ToJSON Vote
 instance FromJSON Vote
 
+-- Given a number of players, check if a vote has received that number of votes.
+allPlayersHaveVoted :: Int -> Vote -> Bool
+allPlayersHaveVoted playerCount vote =
+  playerCount == (M.size . M.filter (/= []) $ responses vote)
+
 publicDescription :: Int -> Vote -> Text
 publicDescription playerCount vote =
-  "On the subject of **" <>
+  let voteCountText = if allPlayersHaveVoted playerCount vote
+        then ":ballot_box: **All players have voted.** "
+        else "So far, out of the " <>
+                (T.pack . show $ playerCount) <>
+                " players, " <>
+                (T.pack . show . M.size . M.filter (/= []) $ responses vote) <>
+                " have voted. "
+  in "On the subject of **" <>
   purpose vote <>
-  "**. So far, out of the " <>
-  (T.pack . show $ playerCount) <>
-  " players, " <>
-  (T.pack . show . M.size . M.filter (/= []) $ responses vote) <>
-  " have voted. " <>
+  "**. " <>
+  voteCountText <>
   (endConditionDescription . endCondition) vote
 
 userDMDescription :: Text -> EndCondition UTCTime -> Text

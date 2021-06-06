@@ -41,6 +41,13 @@ handleServerMessage _ = return ()
 
 --- DM Voting ---
 -- TODO: Small race condition here involving the vote ending. Shouldn't be a problem though.
+getEmojiName :: ReactionInfo -> Text
+getEmojiName reactInfo =
+  let emojiTitle = emojiName . reactionEmoji $ reactInfo
+  in case emojiId . reactionEmoji $ reactInfo of
+        Nothing -> emojiTitle
+        Just id -> "<:" <> emojiTitle <> ":" <> (T.pack . show) id <> ">"
+
 addReactToVote :: ReactionInfo -> BotM ()
 addReactToVote reactInfo = do
   playerCount <- length <$> players <$> getConfig
@@ -52,14 +59,10 @@ addReactToVote reactInfo = do
     then return ()
     else do
     let (voteid, vote) = (head . M.toList) correspondingVotes
-    let emojiTitle = emojiName . reactionEmoji $ reactInfo
-    let emojiText = case emojiId . reactionEmoji $ reactInfo of
-          Nothing -> emojiTitle
-          Just id -> "<:" <> emojiTitle <> ":" <> (T.pack . show) id <> ">"
     modifyVotes $
       M.adjust
       (\vote -> vote {responses = M.adjust
-                       (\t -> t++[emojiText])
+                       (\t -> t++[getEmojiName reactInfo])
                        ((messages vote) M.! (reactionMessageId reactInfo))
                        (responses vote)})
       voteid
@@ -83,7 +86,7 @@ removeReactFromVote reactInfo = do
     modifyVotes $
       M.adjust
       (\vote -> vote {responses = M.adjust
-                       (\t -> delete (emojiName . reactionEmoji $ reactInfo) t)
+                       (\t -> delete (getEmojiName reactInfo) t)
                        ((messages vote) M.! (reactionMessageId reactInfo))
                        (responses vote)})
       voteid
